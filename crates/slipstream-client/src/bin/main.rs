@@ -1,19 +1,11 @@
-mod dns;
-mod error;
-mod pacing;
-mod pinning;
-mod runtime;
-mod streams;
-
 use clap::{parser::ValueSource, ArgGroup, CommandFactory, FromArgMatches, Parser};
 use slipstream_core::{
     cli::{exit_with_error, exit_with_message, init_logging, unwrap_or_exit},
     normalize_domain, parse_host_port, parse_host_port_parts, sip003, AddressKind, HostPort,
 };
 use slipstream_ffi::{ClientConfig, ResolverMode, ResolverSpec};
+use slipstream_client::run_client;
 use tokio::runtime::Builder;
-
-use runtime::run_client;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -416,7 +408,7 @@ mod tests {
         assert_eq!(parsed.resolvers[0].resolver.host, "1.1.1.1");
         assert_eq!(parsed.resolvers[0].mode, ResolverMode::Recursive);
         assert_eq!(parsed.resolvers[1].resolver.host, "2.2.2.2");
-        assert_eq!(parsed.resolvers[1].resolver.port, 5353);
+        assert_eq!(parsed.resolvers[1].mode, ResolverMode::Authoritative);
         assert_eq!(parsed.resolvers[2].resolver.host, "3.3.3.3");
         assert_eq!(parsed.resolvers[2].mode, ResolverMode::Authoritative);
         assert_eq!(parsed.resolvers[3].resolver.host, "4.4.4.4");

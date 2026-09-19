@@ -428,6 +428,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "slipstream-client-ffi"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "slipstream-client",
+ "slipstream-core",
+ "slipstream-ffi",
+ "tokio",
+]
+
+[[package]]
 name = "slipstream-core"
 version = "0.1.1"
 dependencies = [

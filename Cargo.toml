@@ -5,6 +5,7 @@ members = [
   "crates/slipstream-ffi",
   "crates/slipstream-client",
   "crates/slipstream-server",
+  "crates/slipstream-client-ffi",
 ]
 resolver = "2"
 

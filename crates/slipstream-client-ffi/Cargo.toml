@@ -1,0 +1,22 @@
+[package]
+name = "slipstream-client-ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "slipstream_client_ffi"
+crate-type = ["cdylib"]
+
+[dependencies]
+slipstream-client = { path = "../slipstream-client" }
+slipstream-core = { path = "../slipstream-core" }
+slipstream-ffi = { path = "../slipstream-ffi" }
+tokio = { version = "1", features = ["rt", "sync"] }
+libc = "0.2"
+
+# This crate runs in threads created from Go's runtime via cgo.
+# If run_client() panics (unlikely — it is well-tested) and this profile
+# is active, the entire Go process will be killed. For safer behavior,
+# either keep panic = "unwind" here, or ensure run_client() cannot panic.
+[profile.release]
+panic = "unwind"
