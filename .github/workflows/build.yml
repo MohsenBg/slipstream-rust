@@ -7,6 +7,7 @@ name: Build & Release
 #         |
 #         +--> build-unix     (Android / Linux / macOS, parallel matrix)
 #         +--> build-windows  (Windows DLL)
+#         +--> build-freebsd  (FreeBSD amd64 + arm64, native build inside a VM)
 #                   |
 #                   v
 #             publish-release  ->  packages assets and publishes a GitHub Release
@@ -167,8 +168,6 @@ jobs:
       (needs.create-git-tag.result == 'success' || needs.create-git-tag.result == 'skipped')
     # Pinned to windows-2022: scripts/build_picoquic_windows.ps1 uses the
     # "Visual Studio 17 2022" CMake generator, which windows-latest no longer ships.
-    # ARM64 is cross-compiled from this x64 runner (ARM64 DLLs can't be executed
-    # here, so nothing runs them during the build).
     runs-on: windows-2022
     timeout-minutes: 90
     strategy:
@@ -300,16 +299,90 @@ jobs:
           retention-days: 1
 
   # ===========================================================================
+  # 1c. FreeBSD builds (amd64 + arm64): native build inside a FreeBSD VM
+  #
+  # Cross-compiling to FreeBSD from Linux is fragile (needs a FreeBSD sysroot),
+  # so the build runs natively in a QEMU-hosted FreeBSD VM instead.
+  #   - amd64: x86 runner (KVM-accelerated)
+  #   - arm64: ARM runner, so the aarch64 guest matches the host architecture.
+  #            If the VM action fails to start on the ARM runner, switch its
+  #            `runner` back to ubuntu-latest (slow, fully emulated).
+  # The build script itself refuses to run on anything but FreeBSD.
+  # ===========================================================================
+  build-freebsd:
+    name: Build (freebsd-${{ matrix.arch }})
+    needs: [create-git-tag]
+    if: |
+      always() &&
+      (needs.create-git-tag.result == 'success' || needs.create-git-tag.result == 'skipped')
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            vm_arch: x86_64
+            runner: ubuntu-latest
+          - arch: arm64
+            vm_arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Check virtualization support
+        run: |
+          echo "Host arch: $(uname -m)"
+          ls -l /dev/kvm || echo "::notice title=No KVM::/dev/kvm not available; the VM will use slow software emulation."
+
+      - name: Build inside FreeBSD VM
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "14.2"
+          arch: ${{ matrix.vm_arch }}
+          usesh: true
+          # Runs once when the VM is first set up.
+          prepare: |
+            pkg install -y bash git cmake ninja pkgconf openssl rust curl
+          # Runs inside FreeBSD. Workspace is synced in, and synced back after.
+          run: |
+            uname -a
+            chmod +x ./build-slipstream-freebsd.sh
+            bash ./build-slipstream-freebsd.sh ${{ matrix.arch }}
+
+      - name: Verify build output
+        run: |
+          if [ ! -d dist ] || [ -z "$(ls -A dist)" ]; then
+            echo "::error title=Empty build::freebsd-${{ matrix.arch }} produced no files in dist/"
+            exit 1
+          fi
+          echo "::group::Build output"
+          ls -lh dist/
+          echo "::endgroup::"
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v7
+        with:
+          name: raw-binaries-slipstream-freebsd-${{ matrix.arch }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  # ===========================================================================
   # 2. Package assets and publish the GitHub Release
   # ===========================================================================
   publish-release:
     name: Package & Publish Release
-    needs: [create-git-tag, build-unix, build-windows]
+    needs: [create-git-tag, build-unix, build-windows, build-freebsd]
     if: |
       always() &&
       (needs.create-git-tag.result == 'success' || needs.create-git-tag.result == 'skipped') &&
       needs.build-unix.result == 'success' &&
-      needs.build-windows.result == 'success'
+      needs.build-windows.result == 'success' &&
+      needs.build-freebsd.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
