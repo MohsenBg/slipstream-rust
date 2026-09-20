@@ -1,0 +1,154 @@
+name: Multi-Platform Build & Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: 
+    inputs:
+      version:
+        description: 'Version tag to create (e.g., 2.5 or v2.5)'
+        required: true
+        default: '2.5'
+      prerelease:
+        description: 'Is this a Pre-release? (Check for true, uncheck for standard Release)'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  # ==============================================================================
+  # JOB 0: OPTIONAL TAG CREATION (ONLY RUNS ON MANUAL UI DISPATCH)
+  # ==============================================================================
+  create-git-tag:
+    name: Auto-Create Git Tag
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    outputs:
+      final_tag: ${{ steps.tagger.outputs.tag }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Normalize and Push Tag
+        id: tagger
+        run: |
+          INPUT_VER="${{ github.event.inputs.version }}"
+          
+          if [[ "$INPUT_VER" != v* ]]; then
+            TAG_NAME="v$INPUT_VER"
+          else
+            TAG_NAME="$INPUT_VER"
+          fi
+          
+          echo "Target tag calculated: $TAG_NAME"
+          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Warning: Tag $TAG_NAME already exists. Proceeding with build using existing commit tag."
+          else
+            git tag "$TAG_NAME"
+            git push origin "$TAG_NAME"
+            echo "Successfully created and pushed tag: $TAG_NAME"
+          fi
+
+  # ==============================================================================
+  # JOB 1: STAGE 1 COMPILATION (PARALLEL RUNNERS)
+  # ==============================================================================
+  build-assets:
+    name: Build Target
+    needs: [create-git-tag]
+    if: |
+      always() && 
+      (needs.create-git-tag.result == 'success' || needs.create-git-tag.result == 'skipped')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - name: slipstream-android
+            script: ./build-slipstream-android.sh
+          - name: slipstream-linux
+            script: ./build-slipstream-linux.sh
+          - name: slipstream-macos
+            script: ./build-slipstream-macos.sh
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Make Scripts Executable
+        run: chmod +x ${{ matrix.target.script }}
+
+      - name: Execute Stage 1 Script
+        run: ${{ matrix.target.script }}
+
+      - name: Upload Temporary Raw Binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: raw-binaries-${{ matrix.target.name }}
+          path: dist/
+          retention-days: 1
+
+  # ==============================================================================
+  # JOB 2: STAGE 2 MONOLITHIC RELEASE GENERATION
+  # ==============================================================================
+  publish-release:
+    name: Package Assets & Publish Release
+    needs: [create-git-tag, build-assets]
+    if: |
+      always() &&
+      (needs.create-git-tag.result == 'success' || needs.create-git-tag.result == 'skipped') &&
+      needs.build-assets.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v7
+
+      - name: Initialize Collection Directory
+        run: mkdir -p dist
+
+      - name: Download All Staged Raw Artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Determine Tag and Release Status Context
+        id: context
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "release_tag=${{ needs.create-git-tag.outputs.final_tag }}" >> $GITHUB_OUTPUT
+            echo "is_prerelease=${{ github.event.inputs.prerelease }}" >> $GITHUB_OUTPUT
+          else
+            echo "release_tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Make Release Script Executable
+        run: chmod +x ./release.sh
+
+      - name: Execute Stage 2 Release Aggregator
+        run: ./release.sh "${{ steps.context.outputs.release_tag }}"
+
+      - name: Deploy Monolithic GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.context.outputs.release_tag }}
+          name: "dep-bgscan ${{ steps.context.outputs.release_tag }}"
+          prerelease: ${{ steps.context.outputs.is_prerelease }}
+          files: |
+            release/*
+          body_path: release/release_notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
