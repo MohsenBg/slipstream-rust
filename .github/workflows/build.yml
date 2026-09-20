@@ -207,15 +207,18 @@ jobs:
           # Export OpenSSL settings to later steps.
           # (Write-Host does not write to GITHUB_ENV; Add-Content does.)
           $root = Join-Path $vcpkgRoot "installed\$env:VCPKG_TRIPLET"
+          $pkgconfExe = Join-Path $root "tools\pkgconf\pkgconf.exe"
           @(
             "OPENSSL_DIR=$root",
             "OPENSSL_ROOT_DIR=$root",
             "OPENSSL_LIB_DIR=$root\lib",
             "OPENSSL_INCLUDE_DIR=$root\include",
             "OPENSSL_STATIC=1",
-            "OPENSSL_USE_STATIC_LIBS=ON"
+            "OPENSSL_USE_STATIC_LIBS=ON",
+            "PKG_CONFIG_EXECUTABLE=$pkgconfExe"
           ) | Add-Content -Path $env:GITHUB_ENV -Encoding utf8
           Write-Host "OpenSSL root: $root"
+          Write-Host "PKG_CONFIG_EXECUTABLE: $pkgconfExe"
 
       - name: Build picoquic
         env:
