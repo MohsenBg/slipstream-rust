@@ -199,6 +199,13 @@ pub extern "C" fn slipstream_client_stop(client: *mut SlipstreamClient) -> c_int
     0
 }
 
+/// Returns the library version string. The caller must NOT free the returned pointer.
+#[no_mangle]
+pub extern "C" fn slipstream_version() -> *const c_char {
+    static VERSION: &[u8] = b"1.2\0";
+    VERSION.as_ptr() as *const c_char
+}
+
 /// True while the client is still running. Becomes false if the client exits on its own
 /// (error, panic, etc.), not only after stop(). Do not call after stop() has returned.
 #[no_mangle]
