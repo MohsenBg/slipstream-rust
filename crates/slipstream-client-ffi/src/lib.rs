@@ -56,8 +56,13 @@ unsafe fn opt_string(p: *const c_char) -> Option<String> {
 
 /// Starts a client. Returns an opaque handle, or null on failure.
 /// All C strings are copied; the caller's memory may be freed after this returns.
+///
+/// # Safety
+///
+/// `config` must be a valid pointer to a `SlipstreamClientConfig` struct.
+/// All string fields within must be valid null-terminated C strings.
 #[no_mangle]
-pub extern "C" fn slipstream_client_start(
+pub unsafe extern "C" fn slipstream_client_start(
     config: *const SlipstreamClientConfig,
 ) -> *mut SlipstreamClient {
     if config.is_null() {
@@ -184,8 +189,13 @@ pub extern "C" fn slipstream_client_start(
 
 /// Stops and frees one client. Call exactly once; the pointer is invalid afterwards.
 /// Returns 0.
+///
+/// # Safety
+///
+/// `client` must be a valid pointer returned by `slipstream_client_start`,
+/// and must not have been passed to `slipstream_client_stop` before.
 #[no_mangle]
-pub extern "C" fn slipstream_client_stop(client: *mut SlipstreamClient) -> c_int {
+pub unsafe extern "C" fn slipstream_client_stop(client: *mut SlipstreamClient) -> c_int {
     if client.is_null() {
         return 0;
     }
@@ -202,14 +212,18 @@ pub extern "C" fn slipstream_client_stop(client: *mut SlipstreamClient) -> c_int
 /// Returns the library version string. The caller must NOT free the returned pointer.
 #[no_mangle]
 pub extern "C" fn slipstream_version() -> *const c_char {
-    static VERSION: &[u8] = b"1.2\0";
+    static VERSION: &[u8] = b"0.1.2\0";
     VERSION.as_ptr() as *const c_char
 }
 
 /// True while the client is still running. Becomes false if the client exits on its own
 /// (error, panic, etc.), not only after stop(). Do not call after stop() has returned.
+///
+/// # Safety
+///
+/// `client` must be a valid pointer returned by `slipstream_client_start`.
 #[no_mangle]
-pub extern "C" fn slipstream_client_is_running(client: *const SlipstreamClient) -> bool {
+pub unsafe extern "C" fn slipstream_client_is_running(client: *const SlipstreamClient) -> bool {
     if client.is_null() {
         return false;
     }
