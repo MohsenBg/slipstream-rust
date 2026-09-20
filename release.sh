@@ -121,13 +121,6 @@ for arch in arm64 64; do
   echo "| 🍏 **macOS** ${label} | $(get_link "$name" "📦 $name") |" >>"$NOTES_FILE"
 done
 
-# FreeBSD
-for arch in amd64 arm64; do
-  name="libslipstream-client-freebsd-${arch}.so"
-  label="$(echo "$arch" | sed 's/amd64/AMD64/;s/arm64/ARM64/')"
-  echo "| 🔵 **FreeBSD** ${label} | $(get_link "$name" "📦 $name") |" >>"$NOTES_FILE"
-done
-
 # Windows
 for arch in amd64 arm64; do
   name="libslipstream-client-windows-${arch}.dll"
