@@ -110,9 +110,9 @@ function Get-OpenSslLayout {
         "C:\OpenSSL"
     )
     $vcpkgTriplet = if ($Platform -ieq "ARM64") {
-        "arm64-windows-static-md"
+        "arm64-windows-static"
     } else {
-        "x64-windows-static-md"
+        "x64-windows-static"
     }
     foreach ($path in @($env:VCPKG_INSTALLATION_ROOT, $env:VCPKG_ROOT, "C:\vcpkg")) {
         if (![string]::IsNullOrWhiteSpace($path)) {
@@ -306,7 +306,9 @@ function Invoke-CMakePicoquicBuild {
         "-DOPENSSL_ROOT_DIR=$OpenSslStageDir",
         "-DOPENSSL_USE_STATIC_LIBS=ON",
         "-DCMAKE_PROJECT_picotls_INCLUDE=$picotlsWindowsCompatOverlay",
-        "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+        "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+        "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW",
+        "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded"
     )
     $pkgConfigExecutable = Get-PkgConfigExecutable
     if ($pkgConfigExecutable) {
