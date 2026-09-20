@@ -157,19 +157,37 @@ jobs:
           retention-days: 1 # intermediate only; the release holds the final files
 
   # ===========================================================================
-  # 1b. Windows DLL build
+  # 1b. Windows DLL builds (x64 + ARM64, parallel matrix)
   # ===========================================================================
   build-windows:
-    name: Build (windows-dll)
+    name: Build (windows-dll-${{ matrix.arch }})
     needs: [create-git-tag]
     if: |
       always() &&
       (needs.create-git-tag.result == 'success' || needs.create-git-tag.result == 'skipped')
-    runs-on: windows-latest
+    # Pinned to windows-2022: scripts/build_picoquic_windows.ps1 uses the
+    # "Visual Studio 17 2022" CMake generator, which windows-latest no longer ships.
+    # ARM64 is cross-compiled from this x64 runner (ARM64 DLLs can't be executed
+    # here, so nothing runs them during the build).
+    runs-on: windows-2022
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: x64          # value for build_picoquic_windows.ps1 -Platform
+            rust_target: x86_64-pc-windows-msvc
+            vcpkg_triplet: x64-windows-static-md
+          - arch: arm64
+            platform: ARM64
+            rust_target: aarch64-pc-windows-msvc
+            vcpkg_triplet: arm64-windows-static-md
     env:
-      TARGET: x86_64-pc-windows-msvc
-      VCPKG_TRIPLET: x64-windows-static-md
+      TARGET: ${{ matrix.rust_target }}
+      VCPKG_TRIPLET: ${{ matrix.vcpkg_triplet }}
+      # pkgconf runs on the build machine, so it is always the x64 (host) build.
+      VCPKG_HOST_TRIPLET: x64-windows-static-md
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -200,14 +218,26 @@ jobs:
           }
 
           Write-Host "::group::vcpkg install"
-          & $vcpkg install "pkgconf:$env:VCPKG_TRIPLET" "openssl:$env:VCPKG_TRIPLET"
+          # pkgconf: host triplet (must run on this x64 machine).
+          # openssl : target triplet (x64 or arm64 libraries).
+          & $vcpkg install "pkgconf:$env:VCPKG_HOST_TRIPLET" "openssl:$env:VCPKG_TRIPLET"
           if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed (exit $LASTEXITCODE)" }
           Write-Host "::endgroup::"
 
+          $root = Join-Path $vcpkgRoot "installed\$env:VCPKG_TRIPLET"
+          $hostRoot = Join-Path $vcpkgRoot "installed\$env:VCPKG_HOST_TRIPLET"
+          $pkgconfDir = Join-Path $hostRoot "tools\pkgconf"
+          $pkgconfExe = Join-Path $pkgconfDir "pkgconf.exe"
+          if (-not (Test-Path $pkgconfExe)) {
+            throw "pkgconf.exe not found at $pkgconfExe"
+          }
+
+          # Put pkgconf on PATH for later steps (fallback for CMake's search;
+          # build_picoquic_windows.ps1 also reads PKG_CONFIG_EXECUTABLE directly).
+          Add-Content -Path $env:GITHUB_PATH -Value $pkgconfDir -Encoding utf8
+
           # Export OpenSSL settings to later steps.
           # (Write-Host does not write to GITHUB_ENV; Add-Content does.)
-          $root = Join-Path $vcpkgRoot "installed\$env:VCPKG_TRIPLET"
-          $pkgconfExe = Join-Path $root "tools\pkgconf\pkgconf.exe"
           @(
             "OPENSSL_DIR=$root",
             "OPENSSL_ROOT_DIR=$root",
@@ -215,18 +245,24 @@ jobs:
             "OPENSSL_INCLUDE_DIR=$root\include",
             "OPENSSL_STATIC=1",
             "OPENSSL_USE_STATIC_LIBS=ON",
-            "PKG_CONFIG_EXECUTABLE=$pkgconfExe"
+            "PKG_CONFIG_EXECUTABLE=$pkgconfExe",
+            "PKG_CONFIG_PATH=$root\lib\pkgconfig"
           ) | Add-Content -Path $env:GITHUB_ENV -Encoding utf8
           Write-Host "OpenSSL root: $root"
           Write-Host "PKG_CONFIG_EXECUTABLE: $pkgconfExe"
 
+      # Uses the Windows-specific script (VS generator, OpenSSL staging, picotls
+      # compat overlay, pkgconf passthrough). It exports PICOQUIC_INCLUDE_DIR,
+      # PICOQUIC_LIB_DIR and PICOTLS_INCLUDE_DIR to GITHUB_ENV for the cargo step.
+      # -Platform x64 | ARM64 selects the CMake -A architecture.
       - name: Build picoquic
+        shell: pwsh
         env:
-          CARGO_FEATURE_PICOQUIC_MINIMAL_BUILD: 1
+          PICOQUIC_PLATFORM: ${{ matrix.platform }}
         run: |
-          echo "::group::picoquic"
-          bash scripts/build_picoquic.sh
-          echo "::endgroup::"
+          Write-Host "::group::picoquic ($env:PICOQUIC_PLATFORM)"
+          ./scripts/build_picoquic_windows.ps1 -Platform $env:PICOQUIC_PLATFORM
+          Write-Host "::endgroup::"
 
       - name: Build slipstream-client-ffi
         env:
@@ -234,14 +270,16 @@ jobs:
           BUILD_TYPE: Release
           PICOQUIC_FETCH_PTLS: ON
           CARGO_FEATURE_PICOQUIC_MINIMAL_BUILD: 1
-          RUSTFLAGS: "-C link-arg=-lc"
-          # OPENSSL_* variables come from GITHUB_ENV (set in the vcpkg step).
+          # OPENSSL_* and PICOQUIC_*/PICOTLS_* variables come from GITHUB_ENV
+          # (set by the vcpkg step and build_picoquic_windows.ps1).
         run: |
-          echo "::group::cargo build"
+          echo "::group::cargo build (${TARGET})"
           cargo build --release --target "${TARGET}" -p slipstream-client-ffi
           echo "::endgroup::"
 
       - name: Stage DLL
+        env:
+          ARCH: ${{ matrix.arch }}
         run: |
           SRC="target/${TARGET}/release/slipstream_client_ffi.dll"
           if [ ! -f "${SRC}" ]; then
@@ -250,13 +288,13 @@ jobs:
             exit 1
           fi
           mkdir -p dist
-          cp "${SRC}" dist/libslipstream-client-windows-amd64.dll
+          cp "${SRC}" "dist/libslipstream-client-windows-${ARCH}.dll"
           ls -lh dist/
 
       - name: Upload build output
         uses: actions/upload-artifact@v7
         with:
-          name: raw-binaries-slipstream-windows
+          name: raw-binaries-slipstream-windows-${{ matrix.arch }}
           path: dist/
           if-no-files-found: error
           retention-days: 1

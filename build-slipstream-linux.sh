@@ -194,13 +194,9 @@ EOF
     file "$out/libslipstream_client_ffi.so" || true
     du -h "$out/libslipstream_client_ffi.so" || true
 
-    local norm_arch="$label"
-    if [ "$label" == "arm64" ]; then norm_arch="armv8"
-    elif [ "$label" == "arm32" ]; then norm_arch="armv7"
-    elif [ "$label" == "amd32" ]; then norm_arch="386"; fi
-
-    log "Staging library for linux-${norm_arch}"
-    cp "$out/libslipstream_client_ffi.so" "$DIST_DIR/libslipstream-client-linux-${norm_arch}.so"
+    mkdir -p "$DIST_DIR"
+    log "Staging library for linux-${label}"
+    cp "$out/libslipstream_client_ffi.so" "$DIST_DIR/libslipstream-client-linux-${label}.so"
 }
 
 # --- Run builds ---
@@ -213,19 +209,19 @@ for tgt in "${TARGETS[@]}"; do
                 "$ROOT_DIR/linux-openssl-arm64" "" "0"
             ;;
         arm32)
-            build_target "arm32" "armv7-unknown-linux-gnueabihf" "arm-linux-gnueabihf" \
+            build_target "arm32-v7a" "armv7-unknown-linux-gnueabihf" "arm-linux-gnueabihf" \
                 "arm-linux-gnueabihf-gcc" "arm-linux-gnueabihf-g++" \
                 "arm-linux-gnueabihf-ar" "arm-linux-gnueabihf-ranlib" \
                 "$ROOT_DIR/linux-openssl-arm32" \
                 "-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard" "1"
             ;;
         amd64)
-            build_target "amd64" "x86_64-unknown-linux-gnu" "x86_64-linux-gnu" \
+            build_target "64" "x86_64-unknown-linux-gnu" "x86_64-linux-gnu" \
                 "gcc" "g++" "ar" "ranlib" \
                 "$ROOT_DIR/linux-openssl-amd64" "" "0"
             ;;
         amd32)
-            build_target "amd32" "i686-unknown-linux-gnu" "i686-linux-gnu" \
+            build_target "32" "i686-unknown-linux-gnu" "i686-linux-gnu" \
                 "i686-linux-gnu-gcc" "i686-linux-gnu-g++" \
                 "i686-linux-gnu-ar" "i686-linux-gnu-ranlib" \
                 "$ROOT_DIR/linux-openssl-amd32" "-m32" "1"

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# release.sh — Stage 2 asset packaging. Archives libslipstream-client-*
-# artifacts, computes SHA-256 checksums, and generates Markdown release notes.
+# release.sh — Stage 2 asset packaging. Copies libslipstream-client-*
+# artifacts directly (no tar), computes SHA-256 checksums, and generates
+# Markdown release notes.
 # Requirement: STRICTLY requires the release tag version as the 1st argument.
 # ==============================================================================
 
@@ -35,9 +36,9 @@ log() {
 # ==============================================================================
 log "1. Installing release runner dependencies (Targeting: $TAG_VERSION)"
 sudo apt-get update -y
-sudo apt-get install -y tar coreutils
+sudo apt-get install -y coreutils
 
-for cmd in sha256sum tar; do
+for cmd in sha256sum; do
   if ! command -v "$cmd" &>/dev/null; then
     echo "Error: Required system tool '$cmd' is missing." >&2
     exit 1
@@ -52,28 +53,25 @@ if [ ! -d "$DIST_DIR" ] || [ -z "$(ls -A "$DIST_DIR" 2>/dev/null)" ]; then
   exit 1
 fi
 
-ARCHIVES=()
-
 # ==============================================================================
-# ARCHIVE AND CHECKSUM
+# COPY BINARIES DIRECTLY (no tar)
 # ==============================================================================
-log "2. Packaging artifacts from dist/ into release/"
+log "2. Copying artifacts from dist/ to release/"
 
 cd "$DIST_DIR"
 
-for asset in *; do
+for asset in libslipstream-client-*; do
   [ -f "$asset" ] || continue
-  log "Processing: $asset"
-  archive_name="${asset}.tar.gz"
-  tar -czf "$RELEASE_DIR/$archive_name" "$asset"
-  ARCHIVES+=("$archive_name")
+  log "Copying: $asset"
+  cp "$asset" "$RELEASE_DIR/$asset"
 done
 
 log "3. Generating SHA-256 checksums"
 : >"$CHECKSUM_FILE"
 cd "$RELEASE_DIR"
-for archive in "${ARCHIVES[@]}"; do
-  sha256sum "$archive" >>"$CHECKSUM_FILE"
+for asset in libslipstream-client-*; do
+  [ -f "$asset" ] || continue
+  sha256sum "$asset" >>"$CHECKSUM_FILE"
 done
 
 # ==============================================================================
@@ -102,25 +100,32 @@ This release contains the verified, automated builds for **Slipstream** FFI libr
 | :--- | :--- |
 EOF
 
+# Android
+for arch in arm64-v8a armeabi-v7a x86 x86_64; do
+  name="libslipstream-client-android-${arch}.so"
+  label="$(echo "$arch" | sed 's/arm64-v8a/ARM64 (v8a)/;s/armeabi-v7a/ARMv7/;s/x86_64/AMD64/;s/x86/Intel x86/')"
+  echo "| 🤖 **Android** ${label} | $(get_link "$name" "📦 Download (.so)") |" >>"$NOTES_FILE"
+done
+
 # Linux
-for arch in amd64 armv8 armv7 386; do
-  name="libslipstream-client-linux-${arch}.tar.gz"
-  label="$(echo "$arch" | sed 's/386/32-bit/;s/armv8/ARM64/;s/armv7/ARMv7/;s/amd64/AMD64/')"
-  echo "| 🐧 **Linux** ${label} | $(get_link "$name" "📦 Download (.tar.gz)") |" >>"$NOTES_FILE"
+for arch in arm64 arm32-v7a 64 32; do
+  name="libslipstream-client-linux-${arch}.so"
+  label="$(echo "$arch" | sed 's/arm64/ARM64/;s/arm32-v7a/ARMv7/;s/^64$/AMD64/;s/^32$/32-bit/')"
+  echo "| 🐧 **Linux** ${label} | $(get_link "$name" "📦 Download (.so)") |" >>"$NOTES_FILE"
 done
 
 # macOS
-for arch in arm64 x86_64; do
-  name="libslipstream-client-macos-${arch}.tar.gz"
-  label="$(echo "$arch" | sed 's/arm64/Apple Silicon ARM64/;s/x86_64/Intel x86_64/')"
-  echo "| 🍏 **macOS** ${label} | $(get_link "$name" "📦 Download (.tar.gz)") |" >>"$NOTES_FILE"
+for arch in arm64 64; do
+  name="libslipstream-client-macos-${arch}.dylib"
+  label="$(echo "$arch" | sed 's/arm64/Apple Silicon ARM64/;s/^64$/Intel x86_64/')"
+  echo "| 🍏 **macOS** ${label} | $(get_link "$name" "📦 Download (.dylib)") |" >>"$NOTES_FILE"
 done
 
-# Android
-for arch in arm64 armv7 x86 amd64; do
-  name="libslipstream-client-android-${arch}.tar.gz"
-  label="$(echo "$arch" | sed 's/arm64/ARM64 (v8a)/;s/armv7/ARMv7/;s/x86/Intel x86/;s/amd64/AMD64/')"
-  echo "| 🤖 **Android** ${label} | $(get_link "$name" "📦 Download (.tar.gz)") |" >>"$NOTES_FILE"
+# Windows
+for arch in amd64 arm64; do
+  name="libslipstream-client-windows-${arch}.dll"
+  label="$(echo "$arch" | sed 's/amd64/AMD64/;s/arm64/ARM64/')"
+  echo "| 🪟 **Windows** ${label} | $(get_link "$name" "📦 Download (.dll)") |" >>"$NOTES_FILE"
 done
 
 log "RELEASE MET SUCCESSFUL WITH TAG: $TAG_VERSION"

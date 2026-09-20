@@ -38,21 +38,33 @@ tag; cut the next version instead.
   `./scripts/gen_vectors.sh`, `docs/protocol.md`, `docs/dns-codec.md`.
 
 ## Release Assets
-Every published release must contain exactly these CI-built binary archives and
+Every published release must contain exactly these CI-built binary artifacts and
 their checksums:
 
-- `slipstream-linux-x86_64.tar.gz`
-- `slipstream-linux-x86_64.sha256`
-- `slipstream-linux-arm64.tar.gz`
-- `slipstream-linux-arm64.sha256`
-- `slipstream-macos-x86_64.tar.gz`
-- `slipstream-macos-x86_64.sha256`
-- `slipstream-macos-arm64.tar.gz`
-- `slipstream-macos-arm64.sha256`
-- `slipstream-windows-x86_64.zip`
-- `slipstream-windows-x86_64.sha256`
-- `slipstream-windows-arm64.zip`
-- `slipstream-windows-arm64.sha256`
+- `libslipstream-client-android-arm64-v8a.so`
+- `libslipstream-client-android-arm64-v8a.sha256`
+- `libslipstream-client-android-armeabi-v7a.so`
+- `libslipstream-client-android-armeabi-v7a.sha256`
+- `libslipstream-client-android-x86.so`
+- `libslipstream-client-android-x86.sha256`
+- `libslipstream-client-android-x86_64.so`
+- `libslipstream-client-android-x86_64.sha256`
+- `libslipstream-client-linux-arm64.so`
+- `libslipstream-client-linux-arm64.sha256`
+- `libslipstream-client-linux-arm32-v7a.so`
+- `libslipstream-client-linux-arm32-v7a.sha256`
+- `libslipstream-client-linux-64.so`
+- `libslipstream-client-linux-64.sha256`
+- `libslipstream-client-linux-32.so`
+- `libslipstream-client-linux-32.sha256`
+- `libslipstream-client-macos-arm64.dylib`
+- `libslipstream-client-macos-arm64.sha256`
+- `libslipstream-client-macos-64.dylib`
+- `libslipstream-client-macos-64.sha256`
+- `libslipstream-client-windows-amd64.dll`
+- `libslipstream-client-windows-amd64.sha256`
+- `libslipstream-client-windows-arm64.dll`
+- `libslipstream-client-windows-arm64.sha256`
 
 ## Release
 Use the `Release` GitHub Actions workflow. Do not use `gh release create`

@@ -189,19 +189,10 @@ build_target() {
     file "$out/libslipstream_client_ffi.so" || true
     du -h "$out/libslipstream_client_ffi.so" || true
 
-    local final_arch
-    case "$ABI" in
-        "arm64-v8a")   final_arch="arm64" ;;
-        "armeabi-v7a") final_arch="armv7" ;;
-        "x86")         final_arch="x86"   ;;
-        "x86_64")      final_arch="amd64" ;;
-        *)             final_arch="$ABI"  ;;
-    esac
-
     mkdir -p "$DIST_DIR"
-    log "Staging library for android-${final_arch}"
-    cp "$out/libslipstream_client_ffi.so" "$DIST_DIR/libslipstream-client-android-${final_arch}.so"
-    chmod +x "$DIST_DIR/libslipstream-client-android-${final_arch}.so"
+    log "Staging library for android-${ABI}"
+    cp "$out/libslipstream_client_ffi.so" "$DIST_DIR/libslipstream-client-android-${ABI}.so"
+    chmod +x "$DIST_DIR/libslipstream-client-android-${ABI}.so"
 }
 
 # --- Run builds ---
