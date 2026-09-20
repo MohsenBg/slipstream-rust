@@ -104,28 +104,35 @@ EOF
 for arch in arm64-v8a armeabi-v7a x86 x86_64; do
   name="libslipstream-client-android-${arch}.so"
   label="$(echo "$arch" | sed 's/arm64-v8a/ARM64 (v8a)/;s/armeabi-v7a/ARMv7/;s/x86_64/AMD64/;s/x86/Intel x86/')"
-  echo "| 🤖 **Android** ${label} | $(get_link "$name" "📦 Download (.so)") |" >>"$NOTES_FILE"
+  echo "| 🤖 **Android** ${label} | $(get_link "$name" "📦 $name") |" >>"$NOTES_FILE"
 done
 
 # Linux
 for arch in arm64 arm32-v7a 64 32; do
   name="libslipstream-client-linux-${arch}.so"
   label="$(echo "$arch" | sed 's/arm64/ARM64/;s/arm32-v7a/ARMv7/;s/^64$/AMD64/;s/^32$/32-bit/')"
-  echo "| 🐧 **Linux** ${label} | $(get_link "$name" "📦 Download (.so)") |" >>"$NOTES_FILE"
+  echo "| 🐧 **Linux** ${label} | $(get_link "$name" "📦 $name") |" >>"$NOTES_FILE"
 done
 
 # macOS
 for arch in arm64 64; do
   name="libslipstream-client-macos-${arch}.dylib"
   label="$(echo "$arch" | sed 's/arm64/Apple Silicon ARM64/;s/^64$/Intel x86_64/')"
-  echo "| 🍏 **macOS** ${label} | $(get_link "$name" "📦 Download (.dylib)") |" >>"$NOTES_FILE"
+  echo "| 🍏 **macOS** ${label} | $(get_link "$name" "📦 $name") |" >>"$NOTES_FILE"
+done
+
+# FreeBSD
+for arch in amd64 arm64; do
+  name="libslipstream-client-freebsd-${arch}.so"
+  label="$(echo "$arch" | sed 's/amd64/AMD64/;s/arm64/ARM64/')"
+  echo "| 🔵 **FreeBSD** ${label} | $(get_link "$name" "📦 $name") |" >>"$NOTES_FILE"
 done
 
 # Windows
 for arch in amd64 arm64; do
   name="libslipstream-client-windows-${arch}.dll"
   label="$(echo "$arch" | sed 's/amd64/AMD64/;s/arm64/ARM64/')"
-  echo "| 🪟 **Windows** ${label} | $(get_link "$name" "📦 Download (.dll)") |" >>"$NOTES_FILE"
+  echo "| 🪟 **Windows** ${label} | $(get_link "$name" "📦 $name") |" >>"$NOTES_FILE"
 done
 
 log "RELEASE MET SUCCESSFUL WITH TAG: $TAG_VERSION"
