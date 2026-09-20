@@ -8,7 +8,7 @@ repository = "https://github.com/Mygod/slipstream-rust"
 readme = "../../README.md"
 
 [build-dependencies]
-cc = "1.0"
+cc = "1.4.7"
 
 [dependencies]
 libc = "0.2"
