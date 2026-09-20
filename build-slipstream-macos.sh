@@ -181,13 +181,19 @@ EOF
     du -h "$out/libslipstream_client_ffi.dylib" || true
 
     mkdir -p "$DIST_DIR"
-    log "Staging library for macOS-${arch}"
-    cp "$out/libslipstream_client_ffi.dylib" "$DIST_DIR/libslipstream-client-macos-${arch}.dylib"
+    local out_name
+    if [ "$arch" = "aarch64" ] || [ "$arch" = "arm64" ]; then
+        out_name="arm64"
+    else
+        out_name="64"
+    fi
+    log "Staging library for macOS-${out_name}"
+    cp "$out/libslipstream_client_ffi.dylib" "$DIST_DIR/libslipstream-client-macos-${out_name}.dylib"
 }
 
 # --- Run builds ---
 build_target arm64  aarch64-apple-darwin "aarch64-apple-${DARWIN_SUFFIX}" "$OPENSSL_ARM64"   "11.0"
-build_target 64     x86_64-apple-darwin  "x86_64-apple-${DARWIN_SUFFIX}"  "$OPENSSL_X86_64"  "10.15"
+build_target x86_64 x86_64-apple-darwin  "x86_64-apple-${DARWIN_SUFFIX}"  "$OPENSSL_X86_64"  "10.15"
 
 log "BUILD SUCCESS"
 echo "Staged libraries in $DIST_DIR:"
