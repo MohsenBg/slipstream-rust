@@ -31,6 +31,12 @@ typedef struct {
 typedef struct slipstream_client slipstream_client_t;
 
 /*
+ * Returns the library version string (e.g. "1.2").
+ * The returned pointer is to a static string; the caller must NOT free it.
+ */
+const char *slipstream_version(void);
+
+/*
  * Creates and starts a new Slipstream client instance.
  * Returns non-null handle on success, null on failure.
  *
