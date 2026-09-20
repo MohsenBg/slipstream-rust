@@ -378,7 +378,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.context.outputs.release_tag }}
-          name: "dep-bgscan ${{ steps.context.outputs.release_tag }}"
+          name: "lib-slipstream-client ${{ steps.context.outputs.release_tag }}"
           prerelease: ${{ steps.context.outputs.is_prerelease }}
           files: release/*
           body_path: release/release_notes.md
