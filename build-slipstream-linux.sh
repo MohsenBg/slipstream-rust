@@ -191,8 +191,8 @@ EOF
 
     log "Verify Library Artifacts ($label)"
     local out="target/$rust_target/release"
-    file "$OUT/libslipstream_client_ffi.so" || true
-    du -h "$OUT/libslipstream_client_ffi.so" || true
+    file "$out/libslipstream_client_ffi.so" || true
+    du -h "$out/libslipstream_client_ffi.so" || true
 
     local norm_arch="$label"
     if [ "$label" == "arm64" ]; then norm_arch="armv8"

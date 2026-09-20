@@ -186,8 +186,8 @@ build_target() {
 
     log "Verify Library Artifacts ($ABI)"
     local out="target/$TARGET/release"
-    file "$OUT/libslipstream_client_ffi.so" || true
-    du -h "$OUT/libslipstream_client_ffi.so" || true
+    file "$out/libslipstream_client_ffi.so" || true
+    du -h "$out/libslipstream_client_ffi.so" || true
 
     local final_arch
     case "$ABI" in
@@ -200,7 +200,7 @@ build_target() {
 
     mkdir -p "$DIST_DIR"
     log "Staging library for android-${final_arch}"
-    cp "$OUT/libslipstream_client_ffi.so" "$DIST_DIR/libslipstream-client-android-${final_arch}.so"
+    cp "$out/libslipstream_client_ffi.so" "$DIST_DIR/libslipstream-client-android-${final_arch}.so"
     chmod +x "$DIST_DIR/libslipstream-client-android-${final_arch}.so"
 }
 

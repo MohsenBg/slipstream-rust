@@ -177,8 +177,8 @@ EOF
 
     log "Verify Library Artifacts ($arch)"
     local out="target/$target/release"
-    file "$OUT/libslipstream_client_ffi.dylib" || true
-    du -h "$OUT/libslipstream_client_ffi.dylib" || true
+    file "$out/libslipstream_client_ffi.dylib" || true
+    du -h "$out/libslipstream_client_ffi.dylib" || true
 
     local final_arch
     if [ "$arch" = "aarch64" ] || [ "$arch" = "arm64" ]; then

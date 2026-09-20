@@ -1,77 +1,120 @@
-name: Multi-Platform Build & Release Pipeline
+name: Build & Release
+
+# -----------------------------------------------------------------------------
+# Pipeline overview
+#
+#   create-git-tag  (manual runs only)  ->  creates/validates the release tag
+#         |
+#         +--> build-unix     (Android / Linux / macOS, parallel matrix)
+#         +--> build-windows  (Windows DLL)
+#                   |
+#                   v
+#             publish-release  ->  packages assets and publishes a GitHub Release
+#
+# Triggers:
+#   - Push of a tag matching v*    -> builds and publishes a stable release
+#   - Manual dispatch (Actions UI) -> creates the tag, then builds and publishes
+# -----------------------------------------------------------------------------
 
 on:
   push:
     tags:
-      - 'v*'
-  workflow_dispatch: 
+      - "v*"
+  workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag to create (e.g., 2.5 or v2.5)'
+        description: "Version to release (e.g. 2.5 or v2.5)"
+        type: string
         required: true
-        default: '2.5'
+        default: "2.5"
       prerelease:
-        description: 'Is this a Pre-release? (Check for true, uncheck for standard Release)'
-        required: true
+        description: "Mark as pre-release"
         type: boolean
+        required: true
         default: false
 
+# Least privilege by default; jobs that need more request it explicitly.
 permissions:
-  contents: write
+  contents: read
+
+# Never run two releases for the same ref at once, and never cancel a
+# release that is already publishing.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
-  # ==============================================================================
-  # JOB 0: OPTIONAL TAG CREATION (ONLY RUNS ON MANUAL UI DISPATCH)
-  # ==============================================================================
+  # ===========================================================================
+  # 0. Tag creation (manual dispatch only)
+  # ===========================================================================
   create-git-tag:
-    name: Auto-Create Git Tag
-    runs-on: ubuntu-latest
+    name: Create Git Tag
     if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # required to push the tag
     outputs:
       final_tag: ${{ steps.tagger.outputs.tag }}
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Normalize and Push Tag
+      - name: Normalize version and push tag
         id: tagger
+        env:
+          # Passed via env (not inlined) to avoid script injection from user input.
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          INPUT_VER="${{ github.event.inputs.version }}"
-          
-          if [[ "$INPUT_VER" != v* ]]; then
-            TAG_NAME="v$INPUT_VER"
-          else
-            TAG_NAME="$INPUT_VER"
-          fi
-          
-          echo "Target tag calculated: $TAG_NAME"
-          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "::group::Input"
+          echo "Requested version : '${INPUT_VERSION}'"
+          echo "Commit            : ${GITHUB_SHA}"
+          echo "::endgroup::"
 
-          git config user.name "github-actions[bot]"
+          # Validate: optional 'v', dotted numbers, optional suffix (e.g. -rc1).
+          semver_re='^v?[0-9]+(\.[0-9]+)*([-.][0-9A-Za-z.]+)?$'
+          if [[ ! "${INPUT_VERSION}" =~ ${semver_re} ]]; then
+            echo "::error title=Invalid version::'${INPUT_VERSION}' is not a valid version (expected e.g. 2.5 or v2.5-rc1)."
+            exit 1
+          fi
+
+          # Normalize: always prefix with 'v'.
+          TAG_NAME="${INPUT_VERSION#v}"
+          TAG_NAME="v${TAG_NAME}"
+          echo "Resolved tag: ${TAG_NAME}"
+          echo "tag=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+
+          git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-            echo "Warning: Tag $TAG_NAME already exists. Proceeding with build using existing commit tag."
+          if git rev-parse -q --verify "refs/tags/${TAG_NAME}" >/dev/null; then
+            echo "::warning title=Tag exists::${TAG_NAME} already exists; building from the existing tag."
           else
-            git tag "$TAG_NAME"
-            git push origin "$TAG_NAME"
-            echo "Successfully created and pushed tag: $TAG_NAME"
+            git tag -a "${TAG_NAME}" -m "Release ${TAG_NAME}"
+            git push origin "${TAG_NAME}"
+            echo "::notice title=Tag created::Created and pushed ${TAG_NAME}"
           fi
 
-  # ==============================================================================
-  # JOB 1: STAGE 1 COMPILATION (PARALLEL RUNNERS)
-  # ==============================================================================
-  build-assets:
-    name: Build Target
+  # ===========================================================================
+  # 1a. Unix builds: Android, Linux, macOS (parallel matrix)
+  # ===========================================================================
+  build-unix:
+    name: Build (${{ matrix.target.name }})
     needs: [create-git-tag]
+    # Run after the tag job succeeds, or when it was skipped (tag-push trigger).
     if: |
-      always() && 
+      always() &&
       (needs.create-git-tag.result == 'success' || needs.create-git-tag.result == 'skipped')
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
-      fail-fast: false
+      fail-fast: false # let the other targets finish even if one fails
       matrix:
         target:
           - name: slipstream-android
@@ -80,75 +123,245 @@ jobs:
             script: ./build-slipstream-linux.sh
           - name: slipstream-macos
             script: ./build-slipstream-macos.sh
-
     steps:
-      - name: Checkout Code Repository
+      - name: Checkout
         uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - name: Make Scripts Executable
-        run: chmod +x ${{ matrix.target.script }}
+      - name: Run build script
+        env:
+          BUILD_SCRIPT: ${{ matrix.target.script }}
+        run: |
+          echo "::group::Build ${{ matrix.target.name }}"
+          chmod +x "${BUILD_SCRIPT}"
+          "${BUILD_SCRIPT}"
+          echo "::endgroup::"
 
-      - name: Execute Stage 1 Script
-        run: ${{ matrix.target.script }}
+      - name: Verify build output
+        run: |
+          if [ ! -d dist ] || [ -z "$(ls -A dist)" ]; then
+            echo "::error title=Empty build::${{ matrix.target.name }} produced no files in dist/"
+            exit 1
+          fi
+          echo "::group::Build output"
+          ls -lh dist/
+          echo "::endgroup::"
 
-      - name: Upload Temporary Raw Binaries
+      - name: Upload build output
         uses: actions/upload-artifact@v7
         with:
           name: raw-binaries-${{ matrix.target.name }}
           path: dist/
+          if-no-files-found: error
+          retention-days: 1 # intermediate only; the release holds the final files
+
+  # ===========================================================================
+  # 1b. Windows DLL build
+  # ===========================================================================
+  build-windows:
+    name: Build (windows-dll)
+    needs: [create-git-tag]
+    if: |
+      always() &&
+      (needs.create-git-tag.result == 'success' || needs.create-git-tag.result == 'skipped')
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      TARGET: x86_64-pc-windows-msvc
+      VCPKG_TRIPLET: x64-windows-static-md
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ env.TARGET }}
+          cache: false
+
+      - name: Install OpenSSL via vcpkg
+        shell: pwsh
+        run: |
+          # Locate vcpkg: runner default -> VCPKG_ROOT -> fallback clone.
+          $vcpkgRoot = $env:VCPKG_INSTALLATION_ROOT
+          if ([string]::IsNullOrWhiteSpace($vcpkgRoot)) { $vcpkgRoot = $env:VCPKG_ROOT }
+          if ([string]::IsNullOrWhiteSpace($vcpkgRoot)) { $vcpkgRoot = "C:\vcpkg" }
+          Write-Host "vcpkg root: $vcpkgRoot"
+
+          $vcpkg = Join-Path $vcpkgRoot "vcpkg.exe"
+          if (-not (Test-Path $vcpkg)) {
+            Write-Host "::warning title=vcpkg missing::Not found on runner, bootstrapping a fresh copy."
+            git clone https://github.com/Microsoft/vcpkg.git $vcpkgRoot
+            & "$vcpkgRoot\bootstrap-vcpkg.bat"
+          }
+
+          Write-Host "::group::vcpkg install"
+          & $vcpkg install "pkgconf:$env:VCPKG_TRIPLET" "openssl:$env:VCPKG_TRIPLET"
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed (exit $LASTEXITCODE)" }
+          Write-Host "::endgroup::"
+
+          # Export OpenSSL settings to later steps.
+          # (Write-Host does not write to GITHUB_ENV; Add-Content does.)
+          $root = Join-Path $vcpkgRoot "installed\$env:VCPKG_TRIPLET"
+          @(
+            "OPENSSL_DIR=$root",
+            "OPENSSL_ROOT_DIR=$root",
+            "OPENSSL_LIB_DIR=$root\lib",
+            "OPENSSL_INCLUDE_DIR=$root\include",
+            "OPENSSL_STATIC=1",
+            "OPENSSL_USE_STATIC_LIBS=ON"
+          ) | Add-Content -Path $env:GITHUB_ENV -Encoding utf8
+          Write-Host "OpenSSL root: $root"
+
+      - name: Build picoquic
+        env:
+          CARGO_FEATURE_PICOQUIC_MINIMAL_BUILD: 1
+        run: |
+          echo "::group::picoquic"
+          bash scripts/build_picoquic.sh
+          echo "::endgroup::"
+
+      - name: Build slipstream-client-ffi
+        env:
+          CARGO_BUILD_TARGET: ${{ env.TARGET }}
+          BUILD_TYPE: Release
+          PICOQUIC_FETCH_PTLS: ON
+          CARGO_FEATURE_PICOQUIC_MINIMAL_BUILD: 1
+          RUSTFLAGS: "-C link-arg=-lc"
+          # OPENSSL_* variables come from GITHUB_ENV (set in the vcpkg step).
+        run: |
+          echo "::group::cargo build"
+          cargo build --release --target "${TARGET}" -p slipstream-client-ffi
+          echo "::endgroup::"
+
+      - name: Stage DLL
+        run: |
+          SRC="target/${TARGET}/release/slipstream_client_ffi.dll"
+          if [ ! -f "${SRC}" ]; then
+            echo "::error title=DLL not found::Expected ${SRC}"
+            ls -la "target/${TARGET}/release/" || true
+            exit 1
+          fi
+          mkdir -p dist
+          cp "${SRC}" dist/libslipstream-client-windows-amd64.dll
+          ls -lh dist/
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v7
+        with:
+          name: raw-binaries-slipstream-windows
+          path: dist/
+          if-no-files-found: error
           retention-days: 1
 
-  # ==============================================================================
-  # JOB 2: STAGE 2 MONOLITHIC RELEASE GENERATION
-  # ==============================================================================
+  # ===========================================================================
+  # 2. Package assets and publish the GitHub Release
+  # ===========================================================================
   publish-release:
-    name: Package Assets & Publish Release
-    needs: [create-git-tag, build-assets]
+    name: Package & Publish Release
+    needs: [create-git-tag, build-unix, build-windows]
     if: |
       always() &&
       (needs.create-git-tag.result == 'success' || needs.create-git-tag.result == 'skipped') &&
-      needs.build-assets.result == 'success'
+      needs.build-unix.result == 'success' &&
+      needs.build-windows.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # required to create the release
     steps:
-      - name: Checkout Code Repository
+      - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Initialize Collection Directory
-        run: mkdir -p dist
-
-      - name: Download All Staged Raw Artifacts
+      - name: Download build outputs
         uses: actions/download-artifact@v7
         with:
+          pattern: raw-binaries-*
           path: dist/
           merge-multiple: true
 
-      - name: Determine Tag and Release Status Context
+      - name: Resolve tag and release type
         id: context
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_TAG: ${{ needs.create-git-tag.outputs.final_tag }}
+          DISPATCH_PRERELEASE: ${{ github.event.inputs.prerelease }}
+          PUSHED_TAG: ${{ github.ref_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "release_tag=${{ needs.create-git-tag.outputs.final_tag }}" >> $GITHUB_OUTPUT
-            echo "is_prerelease=${{ github.event.inputs.prerelease }}" >> $GITHUB_OUTPUT
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            TAG="${DISPATCH_TAG}"
+            PRERELEASE="${DISPATCH_PRERELEASE}"
           else
-            echo "release_tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            TAG="${PUSHED_TAG}"
+            PRERELEASE="false"
           fi
 
-      - name: Make Release Script Executable
-        run: chmod +x ./release.sh
+          if [ -z "${TAG}" ]; then
+            echo "::error title=No tag::Could not determine the release tag."
+            exit 1
+          fi
 
-      - name: Execute Stage 2 Release Aggregator
-        run: ./release.sh "${{ steps.context.outputs.release_tag }}"
+          echo "release_tag=${TAG}"          >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=${PRERELEASE}"  >> "$GITHUB_OUTPUT"
+          echo "::notice title=Release context::tag=${TAG} prerelease=${PRERELEASE} trigger=${EVENT_NAME}"
 
-      - name: Deploy Monolithic GitHub Release
+      - name: Inspect downloaded assets
+        run: |
+          echo "::group::dist/"
+          ls -lh dist/
+          echo "::endgroup::"
+
+      - name: Package release assets
+        env:
+          RELEASE_TAG: ${{ steps.context.outputs.release_tag }}
+        run: |
+          chmod +x ./release.sh
+          ./release.sh "${RELEASE_TAG}"
+
+          # Fail early with a clear message rather than inside the release action.
+          if [ ! -f release/release_notes.md ]; then
+            echo "::error title=Missing notes::release/release_notes.md was not generated by release.sh"
+            exit 1
+          fi
+
+          echo "::group::Release contents (with checksums)"
+          ls -lh release/
+          (cd release && sha256sum -- * 2>/dev/null | grep -v 'release_notes.md' || true)
+          echo "::endgroup::"
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.context.outputs.release_tag }}
           name: "dep-bgscan ${{ steps.context.outputs.release_tag }}"
           prerelease: ${{ steps.context.outputs.is_prerelease }}
-          files: |
-            release/*
+          files: release/*
           body_path: release/release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Write run summary
+        if: success()
+        env:
+          RELEASE_TAG: ${{ steps.context.outputs.release_tag }}
+          IS_PRERELEASE: ${{ steps.context.outputs.is_prerelease }}
+        run: |
+          {
+            echo "## Release published"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Tag** | \`${RELEASE_TAG}\` |"
+            echo "| **Pre-release** | ${IS_PRERELEASE} |"
+            echo "| **Commit** | \`${GITHUB_SHA::7}\` |"
+            echo "| **Release page** | ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG} |"
+            echo ""
+            echo "### Assets"
+            echo '```'
+            ls -lh release/
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
