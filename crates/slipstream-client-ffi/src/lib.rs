@@ -1,22 +1,16 @@
 use libc::{c_char, c_int, c_ushort};
 use std::ffi::CStr;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-use slipstream_core::{parse_host_port, AddressKind};
+use slipstream_core::{AddressKind, parse_host_port};
 use slipstream_ffi::{ClientConfig, ResolverMode, ResolverSpec};
 use tokio::sync::oneshot;
 
-/// One client = one OS thread + one Tokio current-thread runtime. No global state.
-///
-/// Stop contract: call `slipstream_client_stop` exactly once per successful start.
-/// The pointer is invalid the moment `stop()` returns.
-///
-/// `alive` is an `Arc<AtomicBool>` shared with the worker thread. It stays valid
-/// until ALL references are dropped (both the struct and the thread release it).
-/// It is set to false when the thread exits for ANY reason: stop(), natural
-/// completion, error, or panic.
+// One client owns its own OS thread and a current-thread tokio runtime.
+// No globals. The alive flag is shared with the worker so external code can
+// poll whether the client died on its own (panic, error, etc).
 pub struct SlipstreamClient {
     alive: Arc<AtomicBool>,
     shutdown: Option<oneshot::Sender<()>>,
@@ -46,22 +40,22 @@ pub struct SlipstreamClientConfig {
     pub debug_streams: bool,
 }
 
-unsafe fn opt_string(p: *const c_char) -> Option<String> {
+fn opt_string(p: *const c_char) -> Option<String> {
     if p.is_null() {
         None
     } else {
-        Some(CStr::from_ptr(p).to_string_lossy().into_owned())
+        unsafe { Some(CStr::from_ptr(p).to_string_lossy().into_owned()) }
     }
 }
 
-/// Starts a client. Returns an opaque handle, or null on failure.
-/// All C strings are copied; the caller's memory may be freed after this returns.
+/// Returns an opaque handle on success, null on failure. All strings are copied,
+/// so the caller may free them once this returns.
 ///
 /// # Safety
 ///
-/// `config` must be a valid pointer to a `SlipstreamClientConfig` struct.
-/// All string fields within must be valid null-terminated C strings.
-#[no_mangle]
+/// `config` must point to a valid `SlipstreamClientConfig` whose string fields
+/// are null-terminated C strings (or null).
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn slipstream_client_start(
     config: *const SlipstreamClientConfig,
 ) -> *mut SlipstreamClient {
@@ -77,15 +71,15 @@ pub unsafe extern "C" fn slipstream_client_start(
         return std::ptr::null_mut();
     }
 
-    let tcp_listen_host = unsafe { opt_string(cfg.tcp_listen_host) }.unwrap_or_default();
-    let domain = unsafe { opt_string(cfg.domain) }.unwrap_or_default();
-    let congestion_control = unsafe { opt_string(cfg.congestion_control) };
-    let cert_path = unsafe { opt_string(cfg.cert_path) };
+    let tcp_listen_host = opt_string(cfg.tcp_listen_host).unwrap_or_default();
+    let domain = opt_string(cfg.domain).unwrap_or_default();
+    let congestion_control = opt_string(cfg.congestion_control);
+    let cert_path = opt_string(cfg.cert_path);
 
     let mut resolvers = Vec::with_capacity(cfg.resolver_count);
     for i in 0..cfg.resolver_count {
         let r = unsafe { *cfg.resolvers.add(i) };
-        let Some(host) = (unsafe { opt_string(r.host) }) else {
+        let Some(host) = opt_string(r.host) else {
             return std::ptr::null_mut();
         };
         let mode = if r.mode == 2 {
@@ -129,8 +123,7 @@ pub unsafe extern "C" fn slipstream_client_start(
             }
         };
 
-        // Guard: sets alive=false when the thread exits for ANY reason,
-        // including natural completion, error, or panic.
+        // Flip alive to false no matter how we exit — normal return, error, panic.
         struct AliveGuard(Arc<AtomicBool>);
         impl Drop for AliveGuard {
             fn drop(&mut self) {
@@ -158,13 +151,12 @@ pub unsafe extern "C" fn slipstream_client_start(
                         eprintln!("slipstream client stopped with error: {:?}", e);
                     }
                 }
-                _ = shutdown_rx => {} // stop() called: run_client future is dropped, RAII cleans up
+                _ = shutdown_rx => {}
             }
         });
-        // rt drops here. Waits for all spawned tasks (TCP reader/writer)
-        // to complete — they detect closed channels and exit.
+
+        // Dropping the runtime waits for spawned tasks to finish
         drop(rt);
-        // alive was already cleared by _guard when run_client returned.
     });
 
     match ready_rx.recv() {
@@ -187,21 +179,20 @@ pub unsafe extern "C" fn slipstream_client_start(
     }))
 }
 
-/// Stops and frees one client. Call exactly once; the pointer is invalid afterwards.
-/// Returns 0.
+/// Stops and frees a client. Call exactly once; the pointer is invalid afterwards.
 ///
 /// # Safety
 ///
-/// `client` must be a valid pointer returned by `slipstream_client_start`,
-/// and must not have been passed to `slipstream_client_stop` before.
-#[no_mangle]
+/// `client` must come from `slipstream_client_start` and not have been stopped yet.
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn slipstream_client_stop(client: *mut SlipstreamClient) -> c_int {
     if client.is_null() {
         return 0;
     }
     let mut client = unsafe { Box::from_raw(client) };
     if let Some(tx) = client.shutdown.take() {
-        let _ = tx.send(()); // Err means the client already finished on its own
+        // Err just means the worker already exited on its own — fine.
+        let _ = tx.send(());
     }
     if let Some(t) = client.thread.take() {
         let _ = t.join();
@@ -209,20 +200,20 @@ pub unsafe extern "C" fn slipstream_client_stop(client: *mut SlipstreamClient) -
     0
 }
 
-/// Returns the library version string. The caller must NOT free the returned pointer.
-#[no_mangle]
+/// Returns the library version. Caller must NOT free the pointer.
+#[unsafe(no_mangle)]
 pub extern "C" fn slipstream_version() -> *const c_char {
-    static VERSION: &[u8] = b"0.1.2\0";
-    VERSION.as_ptr() as *const c_char
+    static VERSION: &CStr = c"0.1.3";
+    VERSION.as_ptr()
 }
 
-/// True while the client is still running. Becomes false if the client exits on its own
-/// (error, panic, etc.), not only after stop(). Do not call after stop() has returned.
+/// True while the worker thread is still running. Goes false if it dies on its
+/// own (error/panic) as well as after `slipstream_client_stop`. Don't call after stop.
 ///
 /// # Safety
 ///
-/// `client` must be a valid pointer returned by `slipstream_client_start`.
-#[no_mangle]
+/// `client` must come from `slipstream_client_start`.
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn slipstream_client_is_running(client: *const SlipstreamClient) -> bool {
     if client.is_null() {
         return false;
