@@ -36,11 +36,7 @@ pub fn stream_read_limit_chunks<T: AsRawFd>(
     let buffer_bytes = tcp_recv_buffer_bytes(stream).unwrap_or(default_buffer_bytes);
     let buffer_bytes = clamp_stream_read_buffer_bytes(buffer_bytes);
     let chunks = buffer_bytes / chunk_bytes;
-    if chunks == 0 {
-        1
-    } else {
-        chunks
-    }
+    if chunks == 0 { 1 } else { chunks }
 }
 
 #[cfg(not(unix))]
@@ -51,11 +47,7 @@ pub fn stream_read_limit_chunks<T>(
 ) -> usize {
     let buffer_bytes = clamp_stream_read_buffer_bytes(default_buffer_bytes);
     let chunks = buffer_bytes / chunk_bytes;
-    if chunks == 0 {
-        1
-    } else {
-        chunks
-    }
+    if chunks == 0 { 1 } else { chunks }
 }
 
 pub fn within_stream_buffer(queued_bytes: usize, incoming_len: usize) -> bool {

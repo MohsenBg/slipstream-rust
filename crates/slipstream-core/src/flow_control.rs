@@ -165,10 +165,10 @@ pub fn reserve_target_offset(
     } else {
         drained
     };
-    if let Some(fin) = fin_offset {
-        if target > fin {
-            target = fin;
-        }
+    if let Some(fin) = fin_offset
+        && target > fin
+    {
+        target = fin;
     }
     target
 }

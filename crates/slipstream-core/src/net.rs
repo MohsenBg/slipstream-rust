@@ -1,7 +1,7 @@
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::io::{Error, ErrorKind};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-use tokio::net::{lookup_host, TcpListener as TokioTcpListener, UdpSocket as TokioUdpSocket};
+use tokio::net::{TcpListener as TokioTcpListener, UdpSocket as TokioUdpSocket, lookup_host};
 
 pub fn is_transient_udp_error(err: &Error) -> bool {
     match err.kind() {
@@ -129,14 +129,14 @@ pub fn bind_tcp_listener_addr(addr: SocketAddr) -> Result<TokioTcpListener, Erro
     if let Err(err) = socket.set_reuse_address(true) {
         tracing::warn!("Failed to enable SO_REUSEADDR on {}: {}", addr, err);
     }
-    if let SocketAddr::V6(_) = addr {
-        if let Err(err) = socket.set_only_v6(false) {
-            tracing::warn!(
-                "Failed to enable dual-stack TCP listener on {}: {}",
-                addr,
-                err
-            );
-        }
+    if let SocketAddr::V6(_) = addr
+        && let Err(err) = socket.set_only_v6(false)
+    {
+        tracing::warn!(
+            "Failed to enable dual-stack TCP listener on {}: {}",
+            addr,
+            err
+        );
     }
     let sock_addr = SockAddr::from(addr);
     socket.bind(&sock_addr)?;
@@ -151,15 +151,15 @@ pub fn bind_udp_socket_addr(
     dual_stack_label: &str,
 ) -> Result<TokioUdpSocket, Error> {
     let socket = Socket::new(socket_domain(&addr), Type::DGRAM, Some(Protocol::UDP))?;
-    if let SocketAddr::V6(_) = addr {
-        if let Err(err) = socket.set_only_v6(false) {
-            tracing::warn!(
-                "Failed to enable dual-stack {} on {}: {}",
-                dual_stack_label,
-                addr,
-                err
-            );
-        }
+    if let SocketAddr::V6(_) = addr
+        && let Err(err) = socket.set_only_v6(false)
+    {
+        tracing::warn!(
+            "Failed to enable dual-stack {} on {}: {}",
+            dual_stack_label,
+            addr,
+            err
+        );
     }
     let sock_addr = SockAddr::from(addr);
     socket.bind(&sock_addr)?;

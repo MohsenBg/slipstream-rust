@@ -254,7 +254,7 @@ fn allows_empty_value_key(key: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_endpoint, parse_plugin_options, split_list, Sip003Option};
+    use super::{Sip003Option, parse_endpoint, parse_plugin_options, split_list};
 
     #[test]
     fn parses_plugin_options_with_escapes() {
