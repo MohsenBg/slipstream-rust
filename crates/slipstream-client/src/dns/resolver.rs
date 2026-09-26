@@ -1,7 +1,7 @@
 use crate::error::ClientError;
 use crate::pacing::{PacingBudgetSnapshot, PacingPollBudget};
 use slipstream_core::{normalize_dual_stack_addr, resolve_host_port};
-use slipstream_ffi::{socket_addr_to_storage, ResolverMode, ResolverSpec};
+use slipstream_ffi::{ResolverMode, ResolverSpec, socket_addr_to_storage};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use tracing::warn;
@@ -124,7 +124,7 @@ pub(crate) fn sockaddr_storage_to_socket_addr(
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_resolvers, PeerAddrMode};
+    use super::{PeerAddrMode, resolve_resolvers};
     use slipstream_core::{AddressFamily, HostPort};
     use slipstream_ffi::{ResolverMode, ResolverSpec};
     use std::net::SocketAddr;

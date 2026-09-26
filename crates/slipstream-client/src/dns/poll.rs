@@ -1,6 +1,6 @@
 use crate::error::ClientError;
 use slipstream_core::net::is_transient_udp_error;
-use slipstream_dns::{build_qname, encode_query, QueryParams, CLASS_IN, RR_TXT};
+use slipstream_dns::{CLASS_IN, QueryParams, RR_TXT, build_qname, encode_query};
 use slipstream_ffi::picoquic::{
     picoquic_cnx_t, picoquic_current_time, picoquic_prepare_packet_ex, slipstream_request_poll,
 };
@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use tokio::net::UdpSocket as TokioUdpSocket;
 
 use super::path::refresh_resolver_path;
-use super::resolver::{sockaddr_storage_to_socket_addr, PeerAddrMode, ResolverState};
+use super::resolver::{PeerAddrMode, ResolverState, sockaddr_storage_to_socket_addr};
 
 const AUTHORITATIVE_POLL_TIMEOUT_US: u64 = 5_000_000;
 

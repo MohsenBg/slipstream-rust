@@ -1,10 +1,10 @@
 use super::Command;
 use slipstream_ffi::picoquic::{picoquic_cnx_t, slipstream_get_max_streams_bidir_remote};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::net::TcpListener as TokioTcpListener;
-use tokio::sync::{mpsc, Notify};
-use tokio::time::{sleep, Duration};
+use tokio::sync::{Notify, mpsc};
+use tokio::time::{Duration, sleep};
 use tracing::warn;
 
 #[derive(Clone)]
@@ -65,11 +65,7 @@ static TEST_ACCEPTOR_LIMIT: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 fn initial_acceptor_limit_override() -> Option<usize> {
     let limit = TEST_ACCEPTOR_LIMIT.load(Ordering::SeqCst);
-    if limit == 0 {
-        None
-    } else {
-        Some(limit)
-    }
+    if limit == 0 { None } else { Some(limit) }
 }
 
 #[cfg(not(test))]
@@ -285,7 +281,7 @@ impl TcpAcceptor {
 mod tests {
     use super::AcceptorLimiter;
     use std::sync::Arc;
-    use tokio::time::{timeout, Duration};
+    use tokio::time::{Duration, timeout};
 
     #[test]
     fn acceptor_unblocks_after_stream_limit_increase() {

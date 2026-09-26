@@ -1,8 +1,9 @@
-use clap::{parser::ValueSource, ArgGroup, CommandFactory, FromArgMatches, Parser};
+use clap::{ArgGroup, CommandFactory, FromArgMatches, Parser, parser::ValueSource};
 use slipstream_client::run_client;
 use slipstream_core::{
+    AddressKind, HostPort,
     cli::{exit_with_error, exit_with_message, init_logging, unwrap_or_exit},
-    normalize_domain, parse_host_port, parse_host_port_parts, sip003, AddressKind, HostPort,
+    normalize_domain, parse_host_port, parse_host_port_parts, sip003,
 };
 use slipstream_ffi::{ClientConfig, ResolverMode, ResolverSpec};
 use tokio::runtime::Builder;

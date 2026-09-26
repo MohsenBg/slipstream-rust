@@ -1,7 +1,7 @@
 use super::Command;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::{mpsc, oneshot, Notify};
+use tokio::sync::{Notify, mpsc, oneshot};
 
 pub(super) const STREAM_READ_CHUNK_BYTES: usize = 4096;
 

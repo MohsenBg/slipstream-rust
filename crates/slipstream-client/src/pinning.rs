@@ -99,10 +99,12 @@ fn load_pinned_cert(cert_path: &str) -> Result<(Vec<u8>, PKey<Public>), String> 
 }
 
 unsafe extern "C" fn pinned_verify_free(ctx: *mut ptls_verify_certificate_t) {
-    if ctx.is_null() {
-        return;
+    unsafe {
+        if ctx.is_null() {
+            return;
+        }
+        let _ = Box::from_raw(ctx as *mut PinnedCertVerifier);
     }
-    let _ = Box::from_raw(ctx as *mut PinnedCertVerifier);
 }
 
 unsafe extern "C" fn pinned_verify_certificate(
@@ -114,27 +116,29 @@ unsafe extern "C" fn pinned_verify_certificate(
     certs: *mut ptls_iovec_t,
     num_certs: size_t,
 ) -> c_int {
-    if self_ptr.is_null() || certs.is_null() || num_certs == 0 {
-        return -1;
+    unsafe {
+        if self_ptr.is_null() || certs.is_null() || num_certs == 0 {
+            return -1;
+        }
+        let verifier = &*(self_ptr as *const PinnedCertVerifier);
+        // SAFETY: picotls supplies a valid certificate chain for the duration of the callback.
+        let certs = std::slice::from_raw_parts(certs, num_certs);
+        let leaf = &certs[0];
+        if leaf.base.is_null() || leaf.len == 0 {
+            return -1;
+        }
+        let leaf_bytes = std::slice::from_raw_parts(leaf.base as *const u8, leaf.len);
+        if leaf_bytes != verifier.pinned_der.as_slice() {
+            return -1;
+        }
+        if !verify_sign.is_null() {
+            *verify_sign = Some(pinned_verify_sign);
+        }
+        if !verify_sign_ctx.is_null() {
+            *verify_sign_ctx = self_ptr as *mut c_void;
+        }
+        0
     }
-    let verifier = &*(self_ptr as *const PinnedCertVerifier);
-    // SAFETY: picotls supplies a valid certificate chain for the duration of the callback.
-    let certs = std::slice::from_raw_parts(certs, num_certs);
-    let leaf = &certs[0];
-    if leaf.base.is_null() || leaf.len == 0 {
-        return -1;
-    }
-    let leaf_bytes = std::slice::from_raw_parts(leaf.base as *const u8, leaf.len);
-    if leaf_bytes != verifier.pinned_der.as_slice() {
-        return -1;
-    }
-    if !verify_sign.is_null() {
-        *verify_sign = Some(pinned_verify_sign);
-    }
-    if !verify_sign_ctx.is_null() {
-        *verify_sign_ctx = self_ptr as *mut c_void;
-    }
-    0
 }
 
 unsafe extern "C" fn pinned_verify_sign(
@@ -143,23 +147,25 @@ unsafe extern "C" fn pinned_verify_sign(
     data: ptls_iovec_t,
     sign: ptls_iovec_t,
 ) -> c_int {
-    if verify_ctx.is_null() {
-        return -1;
-    }
-    if data.base.is_null() && data.len == 0 && sign.base.is_null() && sign.len == 0 {
-        return 0;
-    }
-    if data.base.is_null() || sign.base.is_null() {
-        return -1;
-    }
-    let verifier = &*(verify_ctx as *const PinnedCertVerifier);
-    // SAFETY: picotls supplies valid message and signature buffers while verifying.
-    let data = std::slice::from_raw_parts(data.base as *const u8, data.len);
-    let signature = std::slice::from_raw_parts(sign.base as *const u8, sign.len);
-    match verify_signature(&verifier.pkey, algo, data, signature) {
-        Ok(true) => 0,
-        Ok(false) => -1,
-        Err(_) => -1,
+    unsafe {
+        if verify_ctx.is_null() {
+            return -1;
+        }
+        if data.base.is_null() && data.len == 0 && sign.base.is_null() && sign.len == 0 {
+            return 0;
+        }
+        if data.base.is_null() || sign.base.is_null() {
+            return -1;
+        }
+        let verifier = &*(verify_ctx as *const PinnedCertVerifier);
+        // SAFETY: picotls supplies valid message and signature buffers while verifying.
+        let data = std::slice::from_raw_parts(data.base as *const u8, data.len);
+        let signature = std::slice::from_raw_parts(sign.base as *const u8, sign.len);
+        match verify_signature(&verifier.pkey, algo, data, signature) {
+            Ok(true) => 0,
+            Ok(false) => -1,
+            Err(_) => -1,
+        }
     }
 }
 

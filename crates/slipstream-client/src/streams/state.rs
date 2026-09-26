@@ -5,7 +5,7 @@ use slipstream_ffi::picoquic::picoquic_cnx_t;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::net::TcpStream as TokioTcpStream;
-use tokio::sync::{mpsc, oneshot, Notify};
+use tokio::sync::{Notify, mpsc, oneshot};
 use tracing::{debug, info};
 
 pub(super) const DEFAULT_TCP_RCVBUF_BYTES: usize = 256 * 1024;

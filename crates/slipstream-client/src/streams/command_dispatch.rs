@@ -1,21 +1,21 @@
 use super::invariants::check_stream_invariants;
-use super::io_tasks::{spawn_client_reader, spawn_client_writer, STREAM_READ_CHUNK_BYTES};
+use super::io_tasks::{STREAM_READ_CHUNK_BYTES, spawn_client_reader, spawn_client_writer};
 use super::state::{
-    ClientState, ClientStream, Command, StreamRecvState, StreamSendState,
-    CLIENT_WRITE_COALESCE_DEFAULT_BYTES, DEFAULT_TCP_RCVBUF_BYTES,
+    CLIENT_WRITE_COALESCE_DEFAULT_BYTES, ClientState, ClientStream, Command,
+    DEFAULT_TCP_RCVBUF_BYTES, StreamRecvState, StreamSendState,
 };
 #[cfg(test)]
 use super::test_hooks;
 use slipstream_core::flow_control::{
-    conn_reserve_bytes, consume_error_log_message, consume_stream_data, promote_error_log_message,
-    promote_streams, reserve_target_offset, FlowControlState, PromoteEntry,
+    FlowControlState, PromoteEntry, conn_reserve_bytes, consume_error_log_message,
+    consume_stream_data, promote_error_log_message, promote_streams, reserve_target_offset,
 };
 use slipstream_core::tcp::{stream_read_limit_chunks, tcp_send_buffer_bytes};
 use slipstream_ffi::picoquic::{
     picoquic_add_to_stream, picoquic_cnx_t, picoquic_current_time,
     picoquic_get_next_local_stream_id, picoquic_mark_active_stream, picoquic_stream_data_consumed,
 };
-use slipstream_ffi::{abort_stream_bidi, SLIPSTREAM_INTERNAL_ERROR};
+use slipstream_ffi::{SLIPSTREAM_INTERNAL_ERROR, abort_stream_bidi};
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, warn};
 
@@ -52,10 +52,10 @@ pub(crate) fn drain_stream_data(cnx: *mut picoquic_cnx_t, state_ptr: *mut Client
         let state = unsafe { &mut *state_ptr };
         slipstream_core::drain_stream_data!(state.streams, data_rx, pending, closed_streams);
         for stream_id in &closed_streams {
-            if let Some(stream) = state.streams.get_mut(stream_id) {
-                if stream.send_state == StreamSendState::Open {
-                    stream.send_state = StreamSendState::Closing;
-                }
+            if let Some(stream) = state.streams.get_mut(stream_id)
+                && stream.send_state == StreamSendState::Open
+            {
+                stream.send_state = StreamSendState::Closing;
             }
         }
     }

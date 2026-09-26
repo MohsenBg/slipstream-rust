@@ -6,8 +6,8 @@ use slipstream_core::flow_control::FlowControlState;
 use slipstream_core::test_support::ResetOnDrop;
 use std::sync::Arc;
 use tokio::net::TcpListener as TokioTcpListener;
-use tokio::sync::{mpsc, oneshot, Notify};
-use tokio::time::{sleep, timeout, Duration};
+use tokio::sync::{Notify, mpsc, oneshot};
+use tokio::time::{Duration, sleep, timeout};
 
 #[test]
 fn add_to_stream_fin_failure_removes_stream() {

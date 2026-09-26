@@ -1,15 +1,15 @@
 use crate::dns::{
-    refresh_resolver_path, reset_resolver_path, resolver_mode_to_c,
-    sockaddr_storage_to_socket_addr, PeerAddrMode, ResolverState,
+    PeerAddrMode, ResolverState, refresh_resolver_path, reset_resolver_path, resolver_mode_to_c,
+    sockaddr_storage_to_socket_addr,
 };
 use crate::error::ClientError;
 use crate::streams::{ClientState, PathEvent};
-use slipstream_ffi::picoquic::{
-    picoquic_cnx_t, picoquic_get_default_path_quality, picoquic_get_path_addr,
-    picoquic_get_path_quality, slipstream_get_path_id_from_unique, slipstream_set_path_ack_delay,
-    slipstream_set_path_mode, PICOQUIC_PACKET_LOOP_SEND_MAX,
-};
 use slipstream_ffi::ResolverMode;
+use slipstream_ffi::picoquic::{
+    PICOQUIC_PACKET_LOOP_SEND_MAX, picoquic_cnx_t, picoquic_get_default_path_quality,
+    picoquic_get_path_addr, picoquic_get_path_quality, slipstream_get_path_id_from_unique,
+    slipstream_set_path_ack_delay, slipstream_set_path_mode,
+};
 use std::net::SocketAddr;
 
 const AUTHORITATIVE_LOOP_MULTIPLIER: usize = 4;
@@ -62,19 +62,18 @@ pub(crate) fn drain_path_events(
     for event in events {
         match event {
             PathEvent::Available(unique_path_id) => {
-                if let Some(addr) = path_peer_addr(cnx, unique_path_id) {
-                    if let Some(resolver) =
+                if let Some(addr) = path_peer_addr(cnx, unique_path_id)
+                    && let Some(resolver) =
                         find_resolver_by_addr_mut(resolvers, addr, peer_addr_mode)
-                    {
-                        let path_id =
-                            unsafe { slipstream_get_path_id_from_unique(cnx, unique_path_id) };
-                        if path_id >= 0 {
-                            resolver.unique_path_id = Some(unique_path_id);
-                            resolver.path_id = path_id;
-                            resolver.added = true;
-                        } else {
-                            resolver.unique_path_id = None;
-                        }
+                {
+                    let path_id =
+                        unsafe { slipstream_get_path_id_from_unique(cnx, unique_path_id) };
+                    if path_id >= 0 {
+                        resolver.unique_path_id = Some(unique_path_id);
+                        resolver.path_id = path_id;
+                        resolver.added = true;
+                    } else {
+                        resolver.unique_path_id = None;
                     }
                 }
             }

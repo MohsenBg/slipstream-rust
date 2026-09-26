@@ -7,37 +7,37 @@ use self::path::{
 };
 use self::setup::{bind_tcp_listener, bind_udp_socket, compute_mtu, map_io};
 use crate::dns::{
-    add_paths, expire_inflight_polls, handle_dns_response, maybe_report_debug,
-    refresh_resolver_path, resolve_resolvers, resolver_mode_to_c, send_poll_queries,
-    sockaddr_storage_to_socket_addr, DnsResponseContext, PeerAddrMode,
+    DnsResponseContext, PeerAddrMode, add_paths, expire_inflight_polls, handle_dns_response,
+    maybe_report_debug, refresh_resolver_path, resolve_resolvers, resolver_mode_to_c,
+    send_poll_queries, sockaddr_storage_to_socket_addr,
 };
 use crate::error::ClientError;
 use crate::pacing::{cwnd_target_polls, inflight_packet_estimate};
 use crate::pinning::configure_pinned_certificate;
 use crate::streams::{
-    acceptor::ClientAcceptor, client_callback, drain_commands, drain_stream_data, handle_command,
-    ClientState, Command,
+    ClientState, Command, acceptor::ClientAcceptor, client_callback, drain_commands,
+    drain_stream_data, handle_command,
 };
 use slipstream_core::net::is_transient_udp_error;
-use slipstream_dns::{build_qname, encode_query, QueryParams, CLASS_IN, RR_TXT};
+use slipstream_dns::{CLASS_IN, QueryParams, RR_TXT, build_qname, encode_query};
 use slipstream_ffi::{
-    configure_quic_with_custom,
+    ClientConfig, QuicGuard, ResolverMode, configure_quic_with_custom,
     picoquic::{
-        picoquic_close, picoquic_cnx_t, picoquic_connection_id_t, picoquic_create,
-        picoquic_create_client_cnx, picoquic_current_time, picoquic_disable_keep_alive,
-        picoquic_enable_keep_alive, picoquic_enable_path_callbacks,
+        PICOQUIC_CONNECTION_ID_MAX_SIZE, PICOQUIC_MAX_PACKET_SIZE, PICOQUIC_PACKET_LOOP_RECV_MAX,
+        PICOQUIC_PACKET_LOOP_SEND_MAX, picoquic_close, picoquic_cnx_t, picoquic_connection_id_t,
+        picoquic_create, picoquic_create_client_cnx, picoquic_current_time,
+        picoquic_disable_keep_alive, picoquic_enable_keep_alive, picoquic_enable_path_callbacks,
         picoquic_enable_path_callbacks_default, picoquic_get_next_wake_delay,
         picoquic_prepare_next_packet_ex, picoquic_set_callback, slipstream_has_ready_stream,
         slipstream_is_flow_blocked, slipstream_mixed_cc_algorithm, slipstream_set_cc_override,
-        slipstream_set_default_path_mode, PICOQUIC_CONNECTION_ID_MAX_SIZE,
-        PICOQUIC_MAX_PACKET_SIZE, PICOQUIC_PACKET_LOOP_RECV_MAX, PICOQUIC_PACKET_LOOP_SEND_MAX,
+        slipstream_set_default_path_mode,
     },
-    socket_addr_to_storage, take_crypto_errors, ClientConfig, QuicGuard, ResolverMode,
+    socket_addr_to_storage, take_crypto_errors,
 };
 use std::ffi::CString;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, Notify};
+use tokio::sync::{Notify, mpsc};
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
@@ -407,10 +407,10 @@ pub async fn run_client(config: &ClientConfig<'_>) -> Result<i32, ClientError> {
                 let dest = sockaddr_storage_to_socket_addr(&addr_to)?;
                 let dest = peer_addr_mode.canonicalize(dest);
                 local_addr_storage = addr_from;
-                if let Err(err) = udp.send_to(&packet, dest).await {
-                    if !is_transient_udp_error(&err) {
-                        return Err(map_io(err));
-                    }
+                if let Err(err) = udp.send_to(&packet, dest).await
+                    && !is_transient_udp_error(&err)
+                {
+                    return Err(map_io(err));
                 }
             }
 

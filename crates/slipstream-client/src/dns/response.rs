@@ -1,10 +1,10 @@
 use crate::error::ClientError;
 use slipstream_dns::decode_response;
 use slipstream_ffi::picoquic::{
-    picoquic_cnx_t, picoquic_current_time, picoquic_incoming_packet_ex, picoquic_quic_t,
-    PICOQUIC_PACKET_LOOP_RECV_MAX,
+    PICOQUIC_PACKET_LOOP_RECV_MAX, picoquic_cnx_t, picoquic_current_time,
+    picoquic_incoming_packet_ex, picoquic_quic_t,
 };
-use slipstream_ffi::{socket_addr_to_storage, ResolverMode};
+use slipstream_ffi::{ResolverMode, socket_addr_to_storage};
 use std::net::SocketAddr;
 
 use super::resolver::{PeerAddrMode, ResolverState};
@@ -71,22 +71,22 @@ pub(crate) fn handle_dns_response(
                 resolver.added = true;
             }
             resolver.debug.dns_responses = resolver.debug.dns_responses.saturating_add(1);
-            if let Some(response_id) = response_id {
-                if resolver.mode == ResolverMode::Authoritative {
-                    resolver.inflight_poll_ids.remove(&response_id);
-                }
+            if let Some(response_id) = response_id
+                && resolver.mode == ResolverMode::Authoritative
+            {
+                resolver.inflight_poll_ids.remove(&response_id);
             }
             if resolver.mode == ResolverMode::Recursive {
                 resolver.pending_polls =
                     resolver.pending_polls.saturating_add(1).min(MAX_POLL_BURST);
             }
         }
-    } else if let Some(response_id) = response_id {
-        if let Some(resolver) = find_resolver_by_addr(ctx.resolvers, peer) {
-            resolver.debug.dns_responses = resolver.debug.dns_responses.saturating_add(1);
-            if resolver.mode == ResolverMode::Authoritative {
-                resolver.inflight_poll_ids.remove(&response_id);
-            }
+    } else if let Some(response_id) = response_id
+        && let Some(resolver) = find_resolver_by_addr(ctx.resolvers, peer)
+    {
+        resolver.debug.dns_responses = resolver.debug.dns_responses.saturating_add(1);
+        if resolver.mode == ResolverMode::Authoritative {
+            resolver.inflight_poll_ids.remove(&response_id);
         }
     }
     Ok(())

@@ -1,13 +1,13 @@
 use crate::error::ClientError;
+use slipstream_ffi::ResolverMode;
 use slipstream_ffi::picoquic::{
     picoquic_cnx_t, picoquic_current_time, picoquic_get_path_addr, picoquic_probe_new_path_ex,
     slipstream_find_path_id_by_addr, slipstream_get_path_id_from_unique,
     slipstream_set_default_path_mode,
 };
-use slipstream_ffi::ResolverMode;
 use tracing::{info, warn};
 
-use super::resolver::{reset_resolver_path, ResolverState};
+use super::resolver::{ResolverState, reset_resolver_path};
 
 const PATH_PROBE_INITIAL_DELAY_US: u64 = 250_000;
 const PATH_PROBE_MAX_DELAY_US: u64 = 10_000_000;
