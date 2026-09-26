@@ -1,34 +1,35 @@
-use crate::config::{ensure_cert_key, load_or_create_reset_seed, ResetSeed};
-use crate::udp_fallback::{handle_packet, FallbackManager, PacketContext, MAX_UDP_PACKET_SIZE};
+use crate::config::{ResetSeed, ensure_cert_key, load_or_create_reset_seed};
+use crate::udp_fallback::{FallbackManager, MAX_UDP_PACKET_SIZE, PacketContext, handle_packet};
 use slipstream_core::{
+    HostPort,
     net::{bind_first_resolved_with_ipv4_fallback, bind_udp_socket_addr, is_transient_udp_error},
-    normalize_dual_stack_addr, resolve_host_port, HostPort,
+    normalize_dual_stack_addr, resolve_host_port,
 };
-use slipstream_dns::{encode_response, Question, Rcode, ResponseParams};
+use slipstream_dns::{Question, Rcode, ResponseParams, encode_response};
 use slipstream_ffi::picoquic::{
-    picoquic_cnx_t, picoquic_create, picoquic_current_time, picoquic_delete_cnx,
-    picoquic_get_first_cnx, picoquic_get_next_cnx, picoquic_prepare_packet_ex, picoquic_quic_t,
-    slipstream_has_ready_stream, slipstream_is_flow_blocked, slipstream_server_cc_algorithm,
-    PICOQUIC_MAX_PACKET_SIZE, PICOQUIC_PACKET_LOOP_RECV_MAX,
+    PICOQUIC_MAX_PACKET_SIZE, PICOQUIC_PACKET_LOOP_RECV_MAX, picoquic_cnx_t, picoquic_create,
+    picoquic_current_time, picoquic_delete_cnx, picoquic_get_first_cnx, picoquic_get_next_cnx,
+    picoquic_prepare_packet_ex, picoquic_quic_t, slipstream_has_ready_stream,
+    slipstream_is_flow_blocked, slipstream_server_cc_algorithm,
 };
 use slipstream_ffi::{
-    configure_quic_with_custom, socket_addr_to_storage, take_crypto_errors, QuicGuard,
+    QuicGuard, configure_quic_with_custom, socket_addr_to_storage, take_crypto_errors,
 };
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::fmt;
 use std::net::SocketAddr;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tokio::net::UdpSocket as TokioUdpSocket;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 
 use crate::streams::{
-    drain_commands, handle_command, handle_shutdown, maybe_report_command_stats,
-    remove_connection_streams, server_callback, ServerState,
+    ServerState, drain_commands, handle_command, handle_shutdown, maybe_report_command_stats,
+    remove_connection_streams, server_callback,
 };
 
 // Protocol defaults; see docs/config.md for details.
@@ -250,14 +251,14 @@ pub async fn run_server(config: &ServerConfig) -> Result<i32, ServerError> {
     let udp_local_addr = udp.local_addr().map_err(map_io)?;
     let map_ipv4_peers = matches!(udp_local_addr, SocketAddr::V6(_));
     let local_addr_storage = socket_addr_to_storage(udp_local_addr);
-    if let Some(addr) = fallback_addr {
-        if addr == udp_local_addr {
-            tracing::warn!(
-                "Fallback address matches DNS listen address ({}); non-DNS packets will loop. \
+    if let Some(addr) = fallback_addr
+        && addr == udp_local_addr
+    {
+        tracing::warn!(
+            "Fallback address matches DNS listen address ({}); non-DNS packets will loop. \
                  Configure a different fallback address.",
-                addr
-            );
-        }
+            addr
+        );
     }
     let mut fallback_mgr =
         fallback_addr.map(|addr| FallbackManager::new(udp.clone(), addr, map_ipv4_peers));
@@ -468,10 +469,10 @@ pub async fn run_server(config: &ServerConfig) -> Result<i32, ServerError> {
             } else {
                 slot.peer
             };
-            if let Err(err) = udp.send_to(&response, peer).await {
-                if !is_transient_udp_error(&err) {
-                    return Err(map_io(err));
-                }
+            if let Err(err) = udp.send_to(&response, peer).await
+                && !is_transient_udp_error(&err)
+            {
+                return Err(map_io(err));
             }
         }
     }

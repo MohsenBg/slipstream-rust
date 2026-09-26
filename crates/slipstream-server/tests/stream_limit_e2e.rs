@@ -6,9 +6,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use support::{
-    ensure_client_bin, log_snapshot, pick_tcp_port, pick_udp_port, server_bin_path,
-    spawn_accept_loop_target, spawn_server_client_ready, test_cert_and_key, workspace_root,
-    ClientArgs, ServerArgs,
+    ClientArgs, ServerArgs, ensure_client_bin, log_snapshot, pick_tcp_port, pick_udp_port,
+    server_bin_path, spawn_accept_loop_target, spawn_server_client_ready, test_cert_and_key,
+    workspace_root,
 };
 
 const DOMAIN: &str = "test.example.com";
@@ -35,10 +35,9 @@ fn derive_stream_limit(logs: &support::LogCapture) -> usize {
 
     if let Some(line) =
         support::wait_for_any_log(logs, &[STREAM_LIMIT_LOG_NEEDLE], Duration::from_secs(2))
+        && let Some(limit) = parse_stream_limit_line(&line)
     {
-        if let Some(limit) = parse_stream_limit_line(&line) {
-            return limit;
-        }
+        return limit;
     }
 
     eprintln!(

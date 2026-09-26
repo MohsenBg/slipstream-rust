@@ -3,7 +3,7 @@ use slipstream_ffi::picoquic::picoquic_current_time;
 use std::sync::atomic::Ordering;
 use tracing::error;
 
-use super::{ServerState, INVARIANT_REPORTER};
+use super::{INVARIANT_REPORTER, ServerState};
 
 #[derive(Default)]
 pub(crate) struct ServerStreamMetrics {
@@ -87,19 +87,18 @@ pub(super) fn stream_debug_metrics(state: &ServerState, cnx_id: usize) -> Server
             metrics.streams_with_target_fin_pending =
                 metrics.streams_with_target_fin_pending.saturating_add(1);
         }
-        if let Some(flag) = stream.send_pending.as_ref() {
-            if flag.load(Ordering::SeqCst) {
-                metrics.streams_with_send_pending =
-                    metrics.streams_with_send_pending.saturating_add(1);
-            }
+        if let Some(flag) = stream.send_pending.as_ref()
+            && flag.load(Ordering::SeqCst)
+        {
+            metrics.streams_with_send_pending = metrics.streams_with_send_pending.saturating_add(1);
         }
-        if let Some(stash) = stream.send_stash.as_ref() {
-            if !stash.is_empty() {
-                metrics.streams_with_send_stash = metrics.streams_with_send_stash.saturating_add(1);
-                metrics.send_stash_bytes_total = metrics
-                    .send_stash_bytes_total
-                    .saturating_add(stash.len() as u64);
-            }
+        if let Some(stash) = stream.send_stash.as_ref()
+            && !stash.is_empty()
+        {
+            metrics.streams_with_send_stash = metrics.streams_with_send_stash.saturating_add(1);
+            metrics.send_stash_bytes_total = metrics
+                .send_stash_bytes_total
+                .saturating_add(stash.len() as u64);
         }
         if stream.flow.discarding {
             metrics.streams_discarding = metrics.streams_discarding.saturating_add(1);

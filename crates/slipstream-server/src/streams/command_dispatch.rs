@@ -1,4 +1,4 @@
-use super::{check_stream_invariants, shutdown_stream, BacklogStreamSummary, ServerState};
+use super::{BacklogStreamSummary, ServerState, check_stream_invariants, shutdown_stream};
 #[cfg(test)]
 use super::{test_helpers, test_hooks};
 use crate::server::{Command, StreamKey, StreamWrite};
@@ -9,7 +9,7 @@ use slipstream_ffi::picoquic::{
     picoquic_cnx_t, picoquic_current_time, picoquic_mark_active_stream,
     picoquic_stream_data_consumed,
 };
-use slipstream_ffi::{abort_stream_bidi, SLIPSTREAM_INTERNAL_ERROR};
+use slipstream_ffi::{SLIPSTREAM_INTERNAL_ERROR, abort_stream_bidi};
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;

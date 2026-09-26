@@ -4,9 +4,9 @@ mod metrics;
 use crate::server::{Command, StreamKey, StreamWrite};
 use crate::target::spawn_target_connector;
 use slipstream_core::flow_control::{
+    FlowControlState, HasFlowControlState, PromoteEntry, StreamReceiveConfig, StreamReceiveOps,
     conn_reserve_bytes, consume_error_log_message, handle_stream_receive, overflow_log_message,
-    promote_error_log_message, promote_streams, FlowControlState, HasFlowControlState,
-    PromoteEntry, StreamReceiveConfig, StreamReceiveOps,
+    promote_error_log_message, promote_streams,
 };
 use slipstream_core::invariants::InvariantReporter;
 #[cfg(test)]
@@ -17,11 +17,11 @@ use slipstream_ffi::picoquic::{
     picoquic_provide_stream_data_buffer, picoquic_quic_t, picoquic_reset_stream,
     picoquic_stop_sending, picoquic_stream_data_consumed,
 };
-use slipstream_ffi::{abort_stream_bidi, SLIPSTREAM_FILE_CANCEL_ERROR, SLIPSTREAM_INTERNAL_ERROR};
+use slipstream_ffi::{SLIPSTREAM_FILE_CANCEL_ERROR, SLIPSTREAM_INTERNAL_ERROR, abort_stream_bidi};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 use tokio::sync::{mpsc, watch};
 use tracing::{debug, error, warn};
@@ -147,107 +147,108 @@ pub(crate) unsafe extern "C" fn server_callback(
     callback_ctx: *mut std::ffi::c_void,
     _stream_ctx: *mut std::ffi::c_void,
 ) -> libc::c_int {
-    if callback_ctx.is_null() {
-        return 0;
-    }
-    let state = &mut *(callback_ctx as *mut ServerState);
+    unsafe {
+        if callback_ctx.is_null() {
+            return 0;
+        }
+        let state = &mut *(callback_ctx as *mut ServerState);
 
-    match fin_or_event {
-        picoquic_call_back_event_t::picoquic_callback_stream_data
-        | picoquic_call_back_event_t::picoquic_callback_stream_fin => {
-            let fin = matches!(
-                fin_or_event,
-                picoquic_call_back_event_t::picoquic_callback_stream_fin
-            );
-            let data = if length > 0 && !bytes.is_null() {
-                unsafe { std::slice::from_raw_parts(bytes as *const u8, length) }
-            } else {
-                &[]
-            };
-            handle_stream_data(cnx, state, stream_id, fin, data);
-        }
-        picoquic_call_back_event_t::picoquic_callback_stream_reset
-        | picoquic_call_back_event_t::picoquic_callback_stop_sending => {
-            let reason = match fin_or_event {
-                picoquic_call_back_event_t::picoquic_callback_stream_reset => "stream_reset",
-                picoquic_call_back_event_t::picoquic_callback_stop_sending => "stop_sending",
-                _ => "unknown",
-            };
-            let key = StreamKey {
-                cnx: cnx as usize,
-                stream_id,
-            };
-            if let Some(stream) = shutdown_stream(state, key) {
-                warn!(
-                    "stream {:?}: reset event={} tx_bytes={} rx_bytes={} consumed_offset={} queued={} pending_chunks={} pending_fin={} fin_enqueued={} fin_offset={:?} target_fin_pending={} close_after_flush={}",
-                    key.stream_id,
-                    reason,
-                    stream.tx_bytes,
-                    stream.flow.rx_bytes,
-                    stream.flow.consumed_offset,
-                    stream.flow.queued_bytes,
-                    stream.pending_data.len(),
-                    stream.pending_fin,
-                    stream.fin_enqueued,
-                    stream.flow.fin_offset,
-                    stream.target_fin_pending,
-                    stream.close_after_flush
+        match fin_or_event {
+            picoquic_call_back_event_t::picoquic_callback_stream_data
+            | picoquic_call_back_event_t::picoquic_callback_stream_fin => {
+                let fin = matches!(
+                    fin_or_event,
+                    picoquic_call_back_event_t::picoquic_callback_stream_fin
                 );
-            } else {
-                warn!(
-                    "stream {:?}: reset event={} (unknown stream)",
-                    stream_id, reason
-                );
+                let data = if length > 0 && !bytes.is_null() {
+                    std::slice::from_raw_parts(bytes as *const u8, length)
+                } else {
+                    &[]
+                };
+                handle_stream_data(cnx, state, stream_id, fin, data);
             }
-            let _ = picoquic_reset_stream(cnx, stream_id, SLIPSTREAM_FILE_CANCEL_ERROR);
-        }
-        picoquic_call_back_event_t::picoquic_callback_close
-        | picoquic_call_back_event_t::picoquic_callback_application_close
-        | picoquic_call_back_event_t::picoquic_callback_stateless_reset => {
-            remove_connection_streams(state, cnx as usize);
-            let _ = picoquic_close(cnx, 0);
-        }
-        picoquic_call_back_event_t::picoquic_callback_prepare_to_send => {
-            if bytes.is_null() {
-                return 0;
+            picoquic_call_back_event_t::picoquic_callback_stream_reset
+            | picoquic_call_back_event_t::picoquic_callback_stop_sending => {
+                let reason = match fin_or_event {
+                    picoquic_call_back_event_t::picoquic_callback_stream_reset => "stream_reset",
+                    picoquic_call_back_event_t::picoquic_callback_stop_sending => "stop_sending",
+                    _ => "unknown",
+                };
+                let key = StreamKey {
+                    cnx: cnx as usize,
+                    stream_id,
+                };
+                if let Some(stream) = shutdown_stream(state, key) {
+                    warn!(
+                        "stream {:?}: reset event={} tx_bytes={} rx_bytes={} consumed_offset={} queued={} pending_chunks={} pending_fin={} fin_enqueued={} fin_offset={:?} target_fin_pending={} close_after_flush={}",
+                        key.stream_id,
+                        reason,
+                        stream.tx_bytes,
+                        stream.flow.rx_bytes,
+                        stream.flow.consumed_offset,
+                        stream.flow.queued_bytes,
+                        stream.pending_data.len(),
+                        stream.pending_fin,
+                        stream.fin_enqueued,
+                        stream.flow.fin_offset,
+                        stream.target_fin_pending,
+                        stream.close_after_flush
+                    );
+                } else {
+                    warn!(
+                        "stream {:?}: reset event={} (unknown stream)",
+                        stream_id, reason
+                    );
+                }
+                let _ = picoquic_reset_stream(cnx, stream_id, SLIPSTREAM_FILE_CANCEL_ERROR);
             }
-            let key = StreamKey {
-                cnx: cnx as usize,
-                stream_id,
-            };
-            let mut remove_stream = false;
-            if let Some(stream) = state.streams.get_mut(&key) {
-                let pending_flag = stream
-                    .send_pending
-                    .as_ref()
-                    .map(|flag| flag.load(Ordering::SeqCst))
-                    .unwrap_or(false);
-                let has_stash = stream
-                    .send_stash
-                    .as_ref()
-                    .is_some_and(|data| !data.is_empty());
-                let has_pending = pending_flag || has_stash;
+            picoquic_call_back_event_t::picoquic_callback_close
+            | picoquic_call_back_event_t::picoquic_callback_application_close
+            | picoquic_call_back_event_t::picoquic_callback_stateless_reset => {
+                remove_connection_streams(state, cnx as usize);
+                let _ = picoquic_close(cnx, 0);
+            }
+            picoquic_call_back_event_t::picoquic_callback_prepare_to_send => {
+                if bytes.is_null() {
+                    return 0;
+                }
+                let key = StreamKey {
+                    cnx: cnx as usize,
+                    stream_id,
+                };
+                let mut remove_stream = false;
+                if let Some(stream) = state.streams.get_mut(&key) {
+                    let pending_flag = stream
+                        .send_pending
+                        .as_ref()
+                        .map(|flag| flag.load(Ordering::SeqCst))
+                        .unwrap_or(false);
+                    let has_stash = stream
+                        .send_stash
+                        .as_ref()
+                        .is_some_and(|data| !data.is_empty());
+                    let has_pending = pending_flag || has_stash;
 
-                if length == 0 {
-                    if pending_flag && !has_stash && !stream.target_fin_pending {
-                        let rx_empty = stream
-                            .data_rx
-                            .as_ref()
-                            .map(|rx| rx.is_empty())
-                            .unwrap_or(true);
-                        if rx_empty {
-                            let send_stash_bytes = stream
-                                .send_stash
+                    if length == 0 {
+                        if pending_flag && !has_stash && !stream.target_fin_pending {
+                            let rx_empty = stream
+                                .data_rx
                                 .as_ref()
-                                .map(|data| data.len())
-                                .unwrap_or(0);
-                            let queued_bytes = stream.flow.queued_bytes;
-                            let pending_chunks = stream.pending_data.len();
-                            let tx_bytes = stream.tx_bytes;
-                            let target_fin_pending = stream.target_fin_pending;
-                            let close_after_flush = stream.close_after_flush;
-                            let now = unsafe { picoquic_current_time() };
-                            INVARIANT_REPORTER.report(
+                                .map(|rx| rx.is_empty())
+                                .unwrap_or(true);
+                            if rx_empty {
+                                let send_stash_bytes = stream
+                                    .send_stash
+                                    .as_ref()
+                                    .map(|data| data.len())
+                                    .unwrap_or(0);
+                                let queued_bytes = stream.flow.queued_bytes;
+                                let pending_chunks = stream.pending_data.len();
+                                let tx_bytes = stream.tx_bytes;
+                                let target_fin_pending = stream.target_fin_pending;
+                                let close_after_flush = stream.close_after_flush;
+                                let now = picoquic_current_time();
+                                INVARIANT_REPORTER.report(
                                 now,
                                 || {
                                     format!(
@@ -265,102 +266,105 @@ pub(crate) unsafe extern "C" fn server_callback(
                                 },
                                 |msg| warn!("{}", msg),
                             );
+                            }
+                        }
+                        let still_active = if has_pending || stream.target_fin_pending {
+                            1
+                        } else {
+                            0
+                        };
+                        if still_active == 0
+                            && let Some(flag) = stream.send_pending.as_ref()
+                        {
+                            flag.store(false, Ordering::SeqCst);
+                        }
+                        let _ = picoquic_provide_stream_data_buffer(
+                            bytes as *mut _,
+                            0,
+                            0,
+                            still_active,
+                        );
+                        return 0;
+                    }
+
+                    let mut send_data: Option<Vec<u8>> = None;
+                    if let Some(mut stash) = stream.send_stash.take() {
+                        if stash.len() > length {
+                            let remainder = stash.split_off(length);
+                            stream.send_stash = Some(remainder);
+                        }
+                        send_data = Some(stash);
+                    } else if let Some(rx) = stream.data_rx.as_mut() {
+                        match rx.try_recv() {
+                            Ok(mut data) => {
+                                if data.len() > length {
+                                    let remainder = data.split_off(length);
+                                    stream.send_stash = Some(remainder);
+                                }
+                                send_data = Some(data);
+                            }
+                            Err(mpsc::error::TryRecvError::Empty) => {}
+                            Err(mpsc::error::TryRecvError::Disconnected) => {
+                                stream.data_rx = None;
+                                stream.target_fin_pending = true;
+                                stream.close_after_flush = true;
+                            }
                         }
                     }
-                    let still_active = if has_pending || stream.target_fin_pending {
-                        1
-                    } else {
-                        0
-                    };
-                    if still_active == 0 {
+
+                    if let Some(data) = send_data {
+                        let send_len = data.len();
+                        let buffer =
+                            picoquic_provide_stream_data_buffer(bytes as *mut _, send_len, 0, 1);
+                        if buffer.is_null() {
+                            if let Some(stream) = shutdown_stream(state, key) {
+                                error!(
+                                    "stream {:?}: provide_stream_data_buffer returned null send_len={} queued={} pending_chunks={} tx_bytes={}",
+                                    key.stream_id,
+                                    send_len,
+                                    stream.flow.queued_bytes,
+                                    stream.pending_data.len(),
+                                    stream.tx_bytes
+                                );
+                            } else {
+                                error!(
+                                    "stream {:?}: provide_stream_data_buffer returned null send_len={}",
+                                    key.stream_id, send_len
+                                );
+                            }
+                            abort_stream_bidi(cnx, stream_id, SLIPSTREAM_INTERNAL_ERROR);
+                            return 0;
+                        }
+                        std::ptr::copy_nonoverlapping(data.as_ptr(), buffer, data.len());
+                        stream.tx_bytes = stream.tx_bytes.saturating_add(data.len() as u64);
+                    } else if stream.target_fin_pending {
+                        stream.target_fin_pending = false;
+                        if stream.close_after_flush {
+                            remove_stream = true;
+                        }
                         if let Some(flag) = stream.send_pending.as_ref() {
                             flag.store(false, Ordering::SeqCst);
                         }
-                    }
-                    let _ =
-                        picoquic_provide_stream_data_buffer(bytes as *mut _, 0, 0, still_active);
-                    return 0;
-                }
-
-                let mut send_data: Option<Vec<u8>> = None;
-                if let Some(mut stash) = stream.send_stash.take() {
-                    if stash.len() > length {
-                        let remainder = stash.split_off(length);
-                        stream.send_stash = Some(remainder);
-                    }
-                    send_data = Some(stash);
-                } else if let Some(rx) = stream.data_rx.as_mut() {
-                    match rx.try_recv() {
-                        Ok(mut data) => {
-                            if data.len() > length {
-                                let remainder = data.split_off(length);
-                                stream.send_stash = Some(remainder);
-                            }
-                            send_data = Some(data);
+                        let _ = picoquic_provide_stream_data_buffer(bytes as *mut _, 0, 1, 0);
+                    } else {
+                        if let Some(flag) = stream.send_pending.as_ref() {
+                            flag.store(false, Ordering::SeqCst);
                         }
-                        Err(mpsc::error::TryRecvError::Empty) => {}
-                        Err(mpsc::error::TryRecvError::Disconnected) => {
-                            stream.data_rx = None;
-                            stream.target_fin_pending = true;
-                            stream.close_after_flush = true;
-                        }
+                        let _ = picoquic_provide_stream_data_buffer(bytes as *mut _, 0, 0, 0);
                     }
-                }
-
-                if let Some(data) = send_data {
-                    let send_len = data.len();
-                    let buffer =
-                        picoquic_provide_stream_data_buffer(bytes as *mut _, send_len, 0, 1);
-                    if buffer.is_null() {
-                        if let Some(stream) = shutdown_stream(state, key) {
-                            error!(
-                                "stream {:?}: provide_stream_data_buffer returned null send_len={} queued={} pending_chunks={} tx_bytes={}",
-                                key.stream_id,
-                                send_len,
-                                stream.flow.queued_bytes,
-                                stream.pending_data.len(),
-                                stream.tx_bytes
-                            );
-                        } else {
-                            error!(
-                                "stream {:?}: provide_stream_data_buffer returned null send_len={}",
-                                key.stream_id, send_len
-                            );
-                        }
-                        unsafe { abort_stream_bidi(cnx, stream_id, SLIPSTREAM_INTERNAL_ERROR) };
-                        return 0;
-                    }
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(data.as_ptr(), buffer, data.len());
-                    }
-                    stream.tx_bytes = stream.tx_bytes.saturating_add(data.len() as u64);
-                } else if stream.target_fin_pending {
-                    stream.target_fin_pending = false;
-                    if stream.close_after_flush {
-                        remove_stream = true;
-                    }
-                    if let Some(flag) = stream.send_pending.as_ref() {
-                        flag.store(false, Ordering::SeqCst);
-                    }
-                    let _ = picoquic_provide_stream_data_buffer(bytes as *mut _, 0, 1, 0);
                 } else {
-                    if let Some(flag) = stream.send_pending.as_ref() {
-                        flag.store(false, Ordering::SeqCst);
-                    }
                     let _ = picoquic_provide_stream_data_buffer(bytes as *mut _, 0, 0, 0);
                 }
-            } else {
-                let _ = picoquic_provide_stream_data_buffer(bytes as *mut _, 0, 0, 0);
-            }
 
-            if remove_stream {
-                shutdown_stream(state, key);
+                if remove_stream {
+                    shutdown_stream(state, key);
+                }
             }
+            _ => {}
         }
-        _ => {}
-    }
 
-    0
+        0
+    }
 }
 
 fn handle_stream_data(
@@ -587,8 +591,8 @@ mod tests {
     use super::*;
     use std::collections::VecDeque;
     use std::net::SocketAddr;
-    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
     use tokio::sync::{mpsc, watch};
 
     #[test]

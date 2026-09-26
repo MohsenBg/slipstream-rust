@@ -1,5 +1,5 @@
 use super::{FallbackManager, FallbackSession, MAX_UDP_PACKET_SIZE, NON_DNS_STREAK_THRESHOLD};
-use crate::server::{map_io, ServerError};
+use crate::server::{ServerError, map_io};
 use slipstream_core::{net::is_transient_udp_error, normalize_dual_stack_addr};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
@@ -37,15 +37,15 @@ impl FallbackManager {
             Some(socket) => socket,
             None => return,
         };
-        if let Err(err) = socket.send(packet).await {
-            if !is_transient_udp_error(&err) {
-                tracing::warn!(
-                    "fallback write to {} for client {} failed: {}",
-                    self.fallback_addr,
-                    peer,
-                    err
-                );
-            }
+        if let Err(err) = socket.send(packet).await
+            && !is_transient_udp_error(&err)
+        {
+            tracing::warn!(
+                "fallback write to {} for client {} failed: {}",
+                self.fallback_addr,
+                peer,
+                err
+            );
         }
     }
 
@@ -59,11 +59,11 @@ impl FallbackManager {
             self.sessions.remove(&peer);
             tracing::debug!("fallback reply loop ended for {}; recreating session", peer);
         }
-        if !self.sessions.contains_key(&peer) {
-            if let Err(err) = self.create_session(peer).await {
-                tracing::warn!("failed to create fallback session for {}: {}", peer, err);
-                return None;
-            }
+        if !self.sessions.contains_key(&peer)
+            && let Err(err) = self.create_session(peer).await
+        {
+            tracing::warn!("failed to create fallback session for {}: {}", peer, err);
+            return None;
         }
 
         let session = self.sessions.get_mut(&peer)?;
@@ -138,15 +138,14 @@ async fn forward_fallback_replies(
                         if let Ok(mut last_seen) = last_seen.lock() {
                             *last_seen = Instant::now();
                         }
-                        if let Err(err) = main_socket.send_to(&buf[..size], client_send_addr).await {
-                            if !is_transient_udp_error(&err) {
+                        if let Err(err) = main_socket.send_to(&buf[..size], client_send_addr).await
+                            && !is_transient_udp_error(&err) {
                                 tracing::warn!(
                                     "fallback write to client {} failed: {}",
                                     client_addr,
                                     err
                                 );
                             }
-                        }
                     }
                     Err(err) => {
                         if is_transient_udp_error(&err) {

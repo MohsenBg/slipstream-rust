@@ -399,10 +399,10 @@ where
         }
         match accept {
             Ok((stream, _)) => {
-                if let Some(join) = handler(stream, tx, stop_flag) {
-                    if let Ok(mut handles) = conn_handles_clone.lock() {
-                        handles.push(join);
-                    }
+                if let Some(join) = handler(stream, tx, stop_flag)
+                    && let Ok(mut handles) = conn_handles_clone.lock()
+                {
+                    handles.push(join);
                 }
             }
             Err(_) => {
@@ -445,10 +445,10 @@ where
         while !stop_flag.load(Ordering::Relaxed) {
             match listener.accept() {
                 Ok((stream, _)) => {
-                    if let Some(join) = handler(stream, tx.clone(), Arc::clone(&stop_flag), index) {
-                        if let Ok(mut handles) = conn_handles_clone.lock() {
-                            handles.push(join);
-                        }
+                    if let Some(join) = handler(stream, tx.clone(), Arc::clone(&stop_flag), index)
+                        && let Ok(mut handles) = conn_handles_clone.lock()
+                    {
+                        handles.push(join);
                     }
                     index = index.saturating_add(1);
                 }

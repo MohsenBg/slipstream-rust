@@ -2,15 +2,15 @@ mod support;
 
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use support::{
-    ensure_client_bin, log_snapshot, pick_tcp_port, pick_udp_port, server_bin_path,
-    spawn_accept_loop_target, spawn_server_client_ready, test_cert_and_key, wait_for_log,
-    workspace_root, ChildGuard, ClientArgs, LogCapture, ServerArgs,
+    ChildGuard, ClientArgs, LogCapture, ServerArgs, ensure_client_bin, log_snapshot, pick_tcp_port,
+    pick_udp_port, server_bin_path, spawn_accept_loop_target, spawn_server_client_ready,
+    test_cert_and_key, wait_for_log, workspace_root,
 };
 
 const ENV_ENABLE: &str = "SLIPSTREAM_FLOW_CONTROL_TEST";

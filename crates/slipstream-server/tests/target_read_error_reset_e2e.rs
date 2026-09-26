@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 
 use socket2::SockRef;
 use support::{
-    ensure_client_bin, log_snapshot, pick_tcp_port, pick_udp_port, server_bin_path,
-    spawn_server_client_ready, spawn_single_target, test_cert_and_key, wait_for_log,
-    workspace_root, ClientArgs, ServerArgs,
+    ClientArgs, ServerArgs, ensure_client_bin, log_snapshot, pick_tcp_port, pick_udp_port,
+    server_bin_path, spawn_server_client_ready, spawn_single_target, test_cert_and_key,
+    wait_for_log, workspace_root,
 };
 
 const DOMAIN: &str = "test.example.com";

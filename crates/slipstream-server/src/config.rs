@@ -5,15 +5,15 @@ use openssl::hash::MessageDigest;
 use openssl::nid::Nid;
 use openssl::pkey::PKey;
 use openssl::rand::rand_bytes;
-use openssl::x509::{X509NameBuilder, X509};
+use openssl::x509::{X509, X509NameBuilder};
 use std::fmt::Write as FmtWrite;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
+use time::OffsetDateTime;
 use time::format_description::FormatItem;
 use time::macros::format_description;
-use time::OffsetDateTime;
 
 use slipstream_ffi::picoquic::PICOQUIC_RESET_SECRET_SIZE;
 

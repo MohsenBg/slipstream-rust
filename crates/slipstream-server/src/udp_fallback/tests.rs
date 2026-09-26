@@ -1,7 +1,7 @@
 use super::*;
-use slipstream_dns::{encode_query, QueryParams, CLASS_IN, RR_A};
+use slipstream_dns::{CLASS_IN, QueryParams, RR_A, encode_query};
 use tokio::sync::mpsc;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 fn build_dns_query(name: &str) -> Vec<u8> {
     encode_query(&QueryParams {
@@ -317,12 +317,11 @@ async fn fallback_session_expires_before_forwarding() {
         .expect("fallback receive");
     assert_eq!(echoed, non_dns);
 
-    if let Some(manager) = fallback_mgr.as_mut() {
-        if let Some(session) = manager.sessions.get(&peer) {
-            if let Ok(mut last_seen) = session.last_seen.lock() {
-                *last_seen = Instant::now() - FALLBACK_IDLE_TIMEOUT - Duration::from_secs(1);
-            }
-        }
+    if let Some(manager) = fallback_mgr.as_mut()
+        && let Some(session) = manager.sessions.get(&peer)
+        && let Ok(mut last_seen) = session.last_seen.lock()
+    {
+        *last_seen = Instant::now() - FALLBACK_IDLE_TIMEOUT - Duration::from_secs(1);
     }
 
     let dns_packet = build_dns_query("example.com");

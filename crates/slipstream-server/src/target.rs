@@ -1,11 +1,11 @@
 use crate::server::{
-    Command, StreamKey, StreamWrite, DEFAULT_TCP_RCVBUF_BYTES, STREAM_READ_CHUNK_BYTES,
+    Command, DEFAULT_TCP_RCVBUF_BYTES, STREAM_READ_CHUNK_BYTES, StreamKey, StreamWrite,
     TARGET_WRITE_COALESCE_DEFAULT_BYTES,
 };
 use slipstream_core::tcp::{stream_read_limit_chunks, tcp_send_buffer_bytes};
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream as TokioTcpStream;
 use tokio::sync::{mpsc, watch};

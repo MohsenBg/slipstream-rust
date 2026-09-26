@@ -1,6 +1,6 @@
-use super::{dummy_sockaddr_storage, FallbackManager, PacketContext};
+use super::{FallbackManager, PacketContext, dummy_sockaddr_storage};
 use crate::server::{ServerError, Slot};
-use slipstream_dns::{decode_query_with_domains, DecodeQueryError};
+use slipstream_dns::{DecodeQueryError, decode_query_with_domains};
 use slipstream_ffi::picoquic::{
     picoquic_cnx_t, picoquic_incoming_packet_ex, picoquic_quic_t, slipstream_disable_ack_delay,
 };
@@ -20,11 +20,11 @@ pub(crate) async fn handle_packet(
     context: &PacketContext<'_>,
     fallback_mgr: &mut Option<FallbackManager>,
 ) -> Result<(), ServerError> {
-    if let Some(manager) = fallback_mgr.as_mut() {
-        if manager.is_active_fallback_peer(peer) {
-            manager.forward_existing(packet, peer).await;
-            return Ok(());
-        }
+    if let Some(manager) = fallback_mgr.as_mut()
+        && manager.is_active_fallback_peer(peer)
+    {
+        manager.forward_existing(packet, peer).await;
+        return Ok(());
     }
 
     match decode_slot(
@@ -90,20 +90,19 @@ fn decode_slot(
             if first_cnx.is_null() {
                 if let Some(payload) =
                     unsafe { take_stateless_packet_for_cid(quic, &query.payload) }
+                    && !payload.is_empty()
                 {
-                    if !payload.is_empty() {
-                        return Ok(DecodeSlotOutcome::Slot(Slot {
-                            peer,
-                            id: query.id,
-                            rd: query.rd,
-                            cd: query.cd,
-                            question: query.question,
-                            rcode: None,
-                            cnx: std::ptr::null_mut(),
-                            path_id: -1,
-                            payload_override: Some(payload),
-                        }));
-                    }
+                    return Ok(DecodeSlotOutcome::Slot(Slot {
+                        peer,
+                        id: query.id,
+                        rd: query.rd,
+                        cd: query.cd,
+                        question: query.question,
+                        rcode: None,
+                        cnx: std::ptr::null_mut(),
+                        path_id: -1,
+                        payload_override: Some(payload),
+                    }));
                 }
                 return Ok(DecodeSlotOutcome::DnsOnly);
             }

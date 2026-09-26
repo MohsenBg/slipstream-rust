@@ -1,4 +1,4 @@
-use super::{DnsPeerState, FallbackManager, FALLBACK_CLEANUP_INTERVAL, FALLBACK_IDLE_TIMEOUT};
+use super::{DnsPeerState, FALLBACK_CLEANUP_INTERVAL, FALLBACK_IDLE_TIMEOUT, FallbackManager};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;

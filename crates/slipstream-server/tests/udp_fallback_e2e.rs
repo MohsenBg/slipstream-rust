@@ -2,16 +2,16 @@ mod support;
 
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use slipstream_dns::{encode_query, is_response, QueryParams, CLASS_IN, RR_A};
+use slipstream_dns::{CLASS_IN, QueryParams, RR_A, encode_query, is_response};
 
 use support::{
-    pick_udp_port, server_bin_path, spawn_server, test_cert_and_key, workspace_root, ServerArgs,
+    ServerArgs, pick_udp_port, server_bin_path, spawn_server, test_cert_and_key, workspace_root,
 };
 
 struct EchoServer {
