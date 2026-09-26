@@ -5,15 +5,15 @@ mod name;
 mod types;
 mod wire;
 
-pub use base32::{decode as base32_decode, encode as base32_encode, Base32Error};
+pub use base32::{Base32Error, decode as base32_decode, encode as base32_encode};
 pub use codec::{
     decode_query, decode_query_with_domains, decode_response, encode_query, encode_response,
     is_response,
 };
 pub use dots::{dotify, undotify};
 pub use types::{
-    DecodeQueryError, DecodedQuery, DnsError, QueryParams, Question, Rcode, ResponseParams,
-    CLASS_IN, EDNS_UDP_PAYLOAD, RR_A, RR_OPT, RR_TXT,
+    CLASS_IN, DecodeQueryError, DecodedQuery, DnsError, EDNS_UDP_PAYLOAD, QueryParams, Question,
+    RR_A, RR_OPT, RR_TXT, Rcode, ResponseParams,
 };
 
 pub fn build_qname(payload: &[u8], domain: &str) -> Result<String, DnsError> {

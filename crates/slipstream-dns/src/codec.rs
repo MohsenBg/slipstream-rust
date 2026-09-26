@@ -3,8 +3,8 @@ use crate::dots;
 
 use crate::name::{encode_name, extract_subdomain_multi, parse_name};
 use crate::types::{
-    DecodeQueryError, DecodedQuery, DnsError, QueryParams, Rcode, ResponseParams, EDNS_UDP_PAYLOAD,
-    RR_OPT, RR_TXT,
+    DecodeQueryError, DecodedQuery, DnsError, EDNS_UDP_PAYLOAD, QueryParams, RR_OPT, RR_TXT, Rcode,
+    ResponseParams,
 };
 use crate::wire::{
     parse_header, parse_question, parse_question_for_reply, read_u16, read_u32, write_u16,
@@ -73,7 +73,7 @@ pub fn decode_query_with_domains(
                 cd,
                 question: Some(question),
                 rcode,
-            })
+            });
         }
     };
 
@@ -97,7 +97,7 @@ pub fn decode_query_with_domains(
                 cd,
                 question: Some(question),
                 rcode: Rcode::ServerFailure,
-            })
+            });
         }
     };
 
@@ -288,7 +288,7 @@ fn encode_opt_record(out: &mut Vec<u8>) -> Result<(), DnsError> {
 #[cfg(test)]
 mod tests {
     use super::encode_response;
-    use crate::types::{Question, ResponseParams, CLASS_IN, RR_TXT};
+    use crate::types::{CLASS_IN, Question, RR_TXT, ResponseParams};
 
     #[test]
     fn encode_response_rejects_large_payload() {

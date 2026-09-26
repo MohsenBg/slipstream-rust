@@ -1,7 +1,7 @@
 use slipstream_core::cli::init_logging;
 use slipstream_dns::{
-    build_qname, decode_query, decode_response, encode_query, encode_response,
-    max_payload_len_for_domain, QueryParams, Question, ResponseParams, CLASS_IN, RR_TXT,
+    CLASS_IN, QueryParams, Question, RR_TXT, ResponseParams, build_qname, decode_query,
+    decode_response, encode_query, encode_response, max_payload_len_for_domain,
 };
 use std::env;
 use std::time::Instant;

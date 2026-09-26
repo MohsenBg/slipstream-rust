@@ -1,6 +1,6 @@
 use slipstream_dns::{
-    build_qname, decode_query_with_domains, encode_query, DecodeQueryError, QueryParams, Rcode,
-    CLASS_IN, RR_TXT,
+    CLASS_IN, DecodeQueryError, QueryParams, RR_TXT, Rcode, build_qname, decode_query_with_domains,
+    encode_query,
 };
 
 #[test]

@@ -3,8 +3,8 @@ use std::path::Path;
 
 use serde::Deserialize;
 use slipstream_dns::{
-    decode_query, decode_response, encode_query, encode_response, DecodeQueryError, QueryParams,
-    Question, Rcode, ResponseParams, CLASS_IN, RR_A, RR_TXT,
+    CLASS_IN, DecodeQueryError, QueryParams, Question, RR_A, RR_TXT, Rcode, ResponseParams,
+    decode_query, decode_response, encode_query, encode_response,
 };
 
 #[derive(Debug, Deserialize)]
