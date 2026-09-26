@@ -29,14 +29,15 @@ pub(crate) fn resolve_openssl_paths() -> OpenSslPaths {
 
     if root.is_some() || include.is_some() {
         let mut resolved = OpenSslPaths { root, include };
-        if cfg!(feature = "openssl-vendored") && !allow_env_overrides {
-            if let (Some(target), Some(root)) = (env::var("TARGET").ok(), resolved.root.as_ref()) {
-                let root_str = root.to_string_lossy();
-                if !root_str.contains(&target) {
-                    if let Some(target_paths) = resolve_openssl_from_build_output() {
-                        resolved = target_paths;
-                    }
-                }
+        if cfg!(feature = "openssl-vendored")
+            && !allow_env_overrides
+            && let (Some(target), Some(root)) = (env::var("TARGET").ok(), resolved.root.as_ref())
+        {
+            let root_str = root.to_string_lossy();
+            if !root_str.contains(&target)
+                && let Some(target_paths) = resolve_openssl_from_build_output()
+            {
+                resolved = target_paths;
             }
         }
         return resolved;

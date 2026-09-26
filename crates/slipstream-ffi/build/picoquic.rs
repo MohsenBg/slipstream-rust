@@ -230,13 +230,13 @@ pub(crate) fn resolve_picoquic_libs(dir: &Path) -> Option<PicoquicLibs> {
                 libs,
             });
         }
-        if let Some(grandparent) = parent.parent() {
-            if let Some(libs) = resolve_picoquic_libs_split(grandparent, dir) {
-                return Some(PicoquicLibs {
-                    search_dirs: vec![grandparent.to_path_buf(), dir.to_path_buf()],
-                    libs,
-                });
-            }
+        if let Some(grandparent) = parent.parent()
+            && let Some(libs) = resolve_picoquic_libs_split(grandparent, dir)
+        {
+            return Some(PicoquicLibs {
+                search_dirs: vec![grandparent.to_path_buf(), dir.to_path_buf()],
+                libs,
+            });
         }
     }
 

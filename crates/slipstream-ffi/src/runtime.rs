@@ -1,13 +1,13 @@
 use crate::picoquic::{
-    picoquic_clear_crypto_errors, picoquic_cnx_t, picoquic_congestion_algorithm_t,
-    picoquic_disable_port_blocking, picoquic_explain_crypto_error, picoquic_free, picoquic_quic_t,
-    picoquic_reset_stream, picoquic_set_cookie_mode, picoquic_set_default_congestion_algorithm,
-    picoquic_set_default_congestion_algorithm_by_name, picoquic_set_default_multipath_option,
-    picoquic_set_default_priority, picoquic_set_initial_send_mtu,
-    picoquic_set_key_log_file_from_env, picoquic_set_max_data_control, picoquic_set_mtu_max,
-    picoquic_set_preemptive_repeat_policy, picoquic_set_stream_data_consumption_mode,
-    picoquic_stop_sending, slipstream_take_stateless_packet_for_cid, SockaddrStorage,
-    PICOQUIC_MAX_PACKET_SIZE,
+    PICOQUIC_MAX_PACKET_SIZE, SockaddrStorage, picoquic_clear_crypto_errors, picoquic_cnx_t,
+    picoquic_congestion_algorithm_t, picoquic_disable_port_blocking, picoquic_explain_crypto_error,
+    picoquic_free, picoquic_quic_t, picoquic_reset_stream, picoquic_set_cookie_mode,
+    picoquic_set_default_congestion_algorithm, picoquic_set_default_congestion_algorithm_by_name,
+    picoquic_set_default_multipath_option, picoquic_set_default_priority,
+    picoquic_set_initial_send_mtu, picoquic_set_key_log_file_from_env,
+    picoquic_set_max_data_control, picoquic_set_mtu_max, picoquic_set_preemptive_repeat_policy,
+    picoquic_set_stream_data_consumption_mode, picoquic_stop_sending,
+    slipstream_take_stateless_packet_for_cid,
 };
 use libc::{c_char, c_int, c_ulong, size_t};
 use slipstream_core::tcp::stream_write_buffer_bytes;
@@ -22,7 +22,7 @@ use winapi::shared::ws2ipdef::SOCKADDR_IN6_LH;
 pub const SLIPSTREAM_INTERNAL_ERROR: u64 = 0x101;
 pub const SLIPSTREAM_FILE_CANCEL_ERROR: u64 = 0x105;
 
-extern "C" {
+unsafe extern "C" {
     fn ERR_error_string_n(e: c_ulong, buf: *mut c_char, len: size_t);
 }
 
@@ -49,8 +49,10 @@ impl Drop for QuicGuard {
 /// Caller must pass valid picoquic pointers and a valid null-terminated congestion
 /// control algorithm name.
 pub unsafe fn configure_quic(quic: *mut picoquic_quic_t, cc_algo: *const c_char, mtu: u32) {
-    configure_quic_common(quic, mtu);
-    picoquic_set_default_congestion_algorithm_by_name(quic, cc_algo);
+    unsafe {
+        configure_quic_common(quic, mtu);
+        picoquic_set_default_congestion_algorithm_by_name(quic, cc_algo);
+    }
 }
 
 /// # Safety
@@ -61,8 +63,10 @@ pub unsafe fn configure_quic_with_custom(
     algo: *mut picoquic_congestion_algorithm_t,
     mtu: u32,
 ) {
-    configure_quic_common(quic, mtu);
-    picoquic_set_default_congestion_algorithm(quic, algo);
+    unsafe {
+        configure_quic_common(quic, mtu);
+        picoquic_set_default_congestion_algorithm(quic, algo);
+    }
 }
 
 /// Configure shared QUIC defaults.
@@ -73,16 +77,18 @@ pub unsafe fn configure_quic_with_custom(
 /// # Safety
 /// `quic` must be a valid picoquic context and `mtu` must be non-zero.
 unsafe fn configure_quic_common(quic: *mut picoquic_quic_t, mtu: u32) {
-    picoquic_set_cookie_mode(quic, 0);
-    picoquic_set_default_priority(quic, 2);
-    picoquic_set_default_multipath_option(quic, 1);
-    picoquic_set_preemptive_repeat_policy(quic, 1);
-    picoquic_disable_port_blocking(quic, 1);
-    picoquic_set_stream_data_consumption_mode(quic, 1);
-    picoquic_set_max_data_control(quic, stream_write_buffer_bytes() as u64);
-    picoquic_set_mtu_max(quic, mtu);
-    picoquic_set_initial_send_mtu(quic, mtu, mtu);
-    picoquic_set_key_log_file_from_env(quic);
+    unsafe {
+        picoquic_set_cookie_mode(quic, 0);
+        picoquic_set_default_priority(quic, 2);
+        picoquic_set_default_multipath_option(quic, 1);
+        picoquic_set_preemptive_repeat_policy(quic, 1);
+        picoquic_disable_port_blocking(quic, 1);
+        picoquic_set_stream_data_consumption_mode(quic, 1);
+        picoquic_set_max_data_control(quic, stream_write_buffer_bytes() as u64);
+        picoquic_set_mtu_max(quic, mtu);
+        picoquic_set_initial_send_mtu(quic, mtu, mtu);
+        picoquic_set_key_log_file_from_env(quic);
+    }
 }
 
 pub fn take_crypto_errors() -> Vec<String> {
@@ -220,25 +226,27 @@ pub unsafe fn take_stateless_packet_for_cid(
     quic: *mut picoquic_quic_t,
     packet: &[u8],
 ) -> Option<Vec<u8>> {
-    if quic.is_null() {
-        return None;
-    }
+    unsafe {
+        if quic.is_null() {
+            return None;
+        }
 
-    let mut buffer = vec![0u8; PICOQUIC_MAX_PACKET_SIZE];
-    let mut length: size_t = 0;
-    let ret = slipstream_take_stateless_packet_for_cid(
-        quic,
-        packet.as_ptr(),
-        packet.len(),
-        buffer.as_mut_ptr(),
-        buffer.len(),
-        &mut length,
-    );
-    if ret <= 0 {
-        return None;
+        let mut buffer = vec![0u8; PICOQUIC_MAX_PACKET_SIZE];
+        let mut length: size_t = 0;
+        let ret = slipstream_take_stateless_packet_for_cid(
+            quic,
+            packet.as_ptr(),
+            packet.len(),
+            buffer.as_mut_ptr(),
+            buffer.len(),
+            &mut length,
+        );
+        if ret <= 0 {
+            return None;
+        }
+        buffer.truncate(length as usize);
+        Some(buffer)
     }
-    buffer.truncate(length as usize);
-    Some(buffer)
 }
 
 /// # Safety
@@ -266,8 +274,10 @@ pub unsafe fn write_stream_or_reset(
 /// # Safety
 /// Caller must ensure `cnx` points to a valid picoquic connection.
 pub unsafe fn abort_stream_bidi(cnx: *mut picoquic_cnx_t, stream_id: u64, app_error: u64) {
-    let _ = picoquic_stop_sending(cnx, stream_id, app_error);
-    let _ = picoquic_reset_stream(cnx, stream_id, app_error);
+    unsafe {
+        let _ = picoquic_stop_sending(cnx, stream_id, app_error);
+        let _ = picoquic_reset_stream(cnx, stream_id, app_error);
+    }
 }
 
 #[cfg(windows)]

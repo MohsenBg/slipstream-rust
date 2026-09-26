@@ -7,7 +7,7 @@ use slipstream_ffi::picoquic::{
     picoquic_create, picoquic_current_time, slipstream_test_get_defer_stream_data_consumption,
     slipstream_test_get_max_data_limit,
 };
-use slipstream_ffi::{configure_quic, QuicGuard};
+use slipstream_ffi::{QuicGuard, configure_quic};
 
 struct EnvVarGuard {
     key: &'static str,
@@ -17,7 +17,7 @@ struct EnvVarGuard {
 impl EnvVarGuard {
     fn set(key: &'static str, value: &str) -> Self {
         let original = env::var(key).ok();
-        env::set_var(key, value);
+        unsafe { env::set_var(key, value) };
         Self { key, original }
     }
 }
@@ -25,8 +25,8 @@ impl EnvVarGuard {
 impl Drop for EnvVarGuard {
     fn drop(&mut self) {
         match self.original.as_ref() {
-            Some(value) => env::set_var(self.key, value),
-            None => env::remove_var(self.key),
+            Some(value) => unsafe { env::set_var(self.key, value) },
+            None => unsafe { env::remove_var(self.key) },
         }
     }
 }

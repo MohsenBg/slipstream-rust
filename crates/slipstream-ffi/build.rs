@@ -236,11 +236,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(lib) = &openssl_crypto_lib {
             add_parent_dir(&mut openssl_search_dirs, lib);
         }
-        if openssl_search_dirs.is_empty() {
-            if let Some(root) = &openssl_paths.root {
-                push_unique_dir(&mut openssl_search_dirs, root.join("lib"));
-                push_unique_dir(&mut openssl_search_dirs, root.join("lib64"));
-            }
+        if openssl_search_dirs.is_empty()
+            && let Some(root) = &openssl_paths.root
+        {
+            push_unique_dir(&mut openssl_search_dirs, root.join("lib"));
+            push_unique_dir(&mut openssl_search_dirs, root.join("lib64"));
         }
         for dir in openssl_search_dirs {
             println!("cargo:rustc-link-search=native={}", dir.display());

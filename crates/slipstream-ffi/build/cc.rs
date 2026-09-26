@@ -38,10 +38,10 @@ pub(crate) fn resolve_cc(target: &str) -> Result<CcTool, Box<dyn std::error::Err
 }
 
 pub(crate) fn resolve_ar(target: &str, cc: &CcTool) -> String {
-    if target.contains("android") {
-        if let Ok(ar) = env::var("RUST_ANDROID_GRADLE_AR") {
-            return ar;
-        }
+    if target.contains("android")
+        && let Ok(ar) = env::var("RUST_ANDROID_GRADLE_AR")
+    {
+        return ar;
     }
     if let Ok(ar) = env::var("AR") {
         return ar;
