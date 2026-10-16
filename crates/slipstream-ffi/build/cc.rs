@@ -79,7 +79,7 @@ pub(crate) fn create_archive(
     if is_msvc {
         let mut lib_cmd = Command::new(ar);
         if let CcTool::Resolved(tool) = cc {
-            for (name, value) in tool.env() {
+            for (name, value) in tool.get_envs() {
                 lib_cmd.env(name, value);
             }
         }
